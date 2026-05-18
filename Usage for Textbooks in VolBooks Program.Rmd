@@ -1390,7 +1390,7 @@ cleanTextbookOrders <- textbookOrders |>
     Title == 'After Victory : Institutions, Strategic Restraint, and the Rebuilding of Order after Major Wars / G. John Ikenberry' ~ 'After Victory',
     Title == "American Democracy in Peril : Eight Challenges to America´s Future" ~ 'American Democracy In Peril : Eight Challenges To Americas Future',
     Title == 'American Military Life in the 21st Century: Social, Cultural, and Economic Issues and Trends [2 Volumes]' ~ 'American Military Life in the 21st Century: Social, Cultural, and Economic Issues and Trends [2 Volumes]',
-    Title == 'An unkindness of ghosts / Rivers Solomon' ~ 'An Unkindnes of Ghosts',
+    Title == 'An unkindness of ghosts / Rivers Solomon' ~ 'An Unkindness of Ghosts',
     Title == 'Applied Artificial Intelligence in Business : Concepts and Cases' ~ 'Applied Artificial Intelligence in Business',
     Title == 'Assessment in Counseling : Procedures and Practices' ~ 'Assessment in Counseling: Procedures and Practices',
     Title == 'Cooperation and Conflict Between State and Local Government' ~ 'Cooperation and Conflict Between State and Local Government',
@@ -1776,6 +1776,14 @@ Gather the files and clean up the data as mentioned in each code chunk above.
 * Looking to create a report for VolBooks?
 
 The PowerBI dashboard should have the visuals you'll need to insert into your report. If you are looking for visuals made here in R instead, see the code below for some potential ideas and places to start.
+
+
+
+
+
+
+
+
 
 
 
