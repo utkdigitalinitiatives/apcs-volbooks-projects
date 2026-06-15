@@ -1,0 +1,1003 @@
+---
+title: "Classroom Use Digital Media Report"
+author: "Alexander Harriman"
+date: "2026-05-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r}
+library(readxl)
+library(writexl)
+library(dplyr)
+library(stringr)
+library(lubridate)
+```
+
+
+This file tracks the usage of all films and other videos purchased for classroom use. This is a supplement to the VolBooks report, which tracks similar information for textbooks. Since the VolBooks data and the video purchasing data are different, not every metric will convert one-to-one.
+
+
+# Load Steven's TDX Ticket Request Data
+
+Steven keeps this up to date as new videos are bought. Each tab of the report corresponds with a different semester when the video was bought, but this does not always line up with the access date within the file.
+
+
+```{r}
+read_excel_allsheets <- function(filename, tibble = FALSE) {
+    sheets <- readxl::excel_sheets(filename)
+    x <- lapply(sheets, function(X) readxl::read_excel(filename, sheet = X))
+    if(!tibble) x <- lapply(x, as.data.frame)
+    names(x) <- sheets
+    x
+}
+
+allTDXTickets <- read_excel_allsheets('TDX Ticket Requests May 4.xlsx')
+```
+
+
+FOR EACH SEMESTER, add a new block to the cell below and edit the semester accordingly. Note that all new semesters are added as tabs at the start of the file, so all references to the tab number must also increase by one with each new tab added.
+
+Each tab's column information may also be slightly different due to manually added notes not being consistent. Only the main data is necessary.
+
+```{r}
+#Spring 2026
+spring26 <- as.data.frame(allTDXTickets[1])
+
+colnames(spring26) <- c('Ticket_Number', 'Instructor', 'Work_Column', 'Title_of_Request', 'Course', 'Class_Semester', 'Title_Count_in_Request', 'Notes', 'X', 'Y', 'Z', 'W')
+
+spring26 <- spring26 |>
+  select(Ticket_Number, Title_of_Request, Instructor, Course, Class_Semester, Title_Count_in_Request, Notes) |>
+  filter(is.na(Ticket_Number) == FALSE) |>
+  mutate(Ticket_Received_Semester = 'Spring 2026')
+
+
+#Fall 2025
+fall25 <- as.data.frame(allTDXTickets[2])
+
+colnames(fall25) <- c('Ticket_Number', 'Instructor', 'Work_Column', 'Title_of_Request', 'Course', 'Class_Semester', 'Title_Count_in_Request', 'Notes', 'X', 'Y', 'Z', 'W')
+
+fall25 <- fall25 |>
+  select(Ticket_Number, Title_of_Request, Instructor, Course, Class_Semester, Title_Count_in_Request, Notes) |>
+  filter(is.na(Ticket_Number) == FALSE) |>
+  mutate(Ticket_Received_Semester = 'Fall 2025')
+
+
+#Summer 2025
+summer25 <- as.data.frame(allTDXTickets[3])
+
+colnames(summer25) <- c('Ticket_Number', 'Instructor', 'Title_of_Request', 'Course', 'Class_Semester', 'Title_Count_in_Request', 'Notes')
+
+summer25 <- summer25 |>
+  select(Ticket_Number, Title_of_Request, Instructor, Course, Class_Semester, Title_Count_in_Request, Notes) |>
+  filter(is.na(Ticket_Number) == FALSE) |>
+  mutate(Ticket_Received_Semester = 'Summer 2025')
+
+
+#Spring 2025
+spring25 <- as.data.frame(allTDXTickets[4])
+
+colnames(spring25) <- c('Ticket_Number', 'Instructor', 'Work_Column', 'Title_of_Request', 'Course', 'Class_Semester', 'Title_Count_in_Request', 'Notes', 'X', 'Y', 'Z', 'W', 'V', 'U')
+
+spring25 <- spring25 |>
+  select(Ticket_Number, Title_of_Request, Instructor, Course, Class_Semester, Title_Count_in_Request, Notes) |>
+  filter(is.na(Ticket_Number) == FALSE) |>
+  mutate(Ticket_Received_Semester = 'Spring 2025')
+
+
+#Fall 2024
+fall24 <- as.data.frame(allTDXTickets[5])
+
+colnames(fall24) <- c('Ticket_Number', 'Instructor', 'Title_of_Request', 'Course', 'Class_Semester', 'Title_Count_in_Request', 'Notes')
+
+fall24 <- fall24 |>
+  select(Ticket_Number, Title_of_Request, Instructor, Course, Class_Semester, Title_Count_in_Request, Notes) |>
+  filter(is.na(Ticket_Number) == FALSE) |>
+  mutate(Ticket_Received_Semester = 'Fall 2024')
+
+
+#Summer 2024
+summer24 <- as.data.frame(allTDXTickets[6])
+
+colnames(summer24) <- c('Ticket_Number', 'Instructor', 'Title_of_Request', 'Course', 'Class_Semester', 'Title_Count_in_Request', 'Notes')
+
+summer24 <- summer24 |>
+  select(Ticket_Number, Title_of_Request, Instructor, Course, Class_Semester, Title_Count_in_Request, Notes) |>
+  filter(is.na(Ticket_Number) == FALSE) |>
+  mutate(Ticket_Received_Semester = 'Summer 2024')
+
+
+#Spring 2024
+spring24 <- as.data.frame(allTDXTickets[7])
+
+colnames(spring24) <- c('Ticket_Number', 'Instructor', 'Title_of_Request', 'Course', 'Class_Semester', 'Title_Count_in_Request', 'Notes')
+
+spring24 <- spring24 |>
+  select(Ticket_Number, Title_of_Request, Instructor, Course, Class_Semester, Title_Count_in_Request, Notes) |>
+  filter(is.na(Ticket_Number) == FALSE) |>
+  mutate(Ticket_Received_Semester = 'Spring 2024')
+
+
+allRequests <- rbind(spring26, fall25, summer25, spring25, fall24, summer24, spring24) |>
+  mutate(Ticket_Number = as.character(Ticket_Number))
+```
+
+
+
+# Get the Video Purchase Data from Alma
+
+
+All video purchases that are specifically for classroom use purposes have the 4th reporting code TDX, TDX - Kanopy, TDX - DSL, or TDX - PPR. 
+
+
+
+```{r}
+videoPurchases <- read_excel('Film Bought for Classroom Use May 11.xlsx')
+```
+
+
+
+## Add Purchase Semester Information
+
+
+FOR EACH SEMESTER, add a new case to the case_when() function below. The date windows roughly follow the academic calendar for each semester.
+
+```{r}
+cleanPurchases <- videoPurchases |>
+  group_by(Title, `MMS Id`) |>
+  summarise(`Transaction Date` = `Transaction Date`[1],
+            `Transaction Amount` = sum(`Transaction Amount`)) |>
+  ungroup() |>
+  mutate(Purchased_Semester = case_when(
+    `Transaction Date` < as.POSIXct('2024-01-01') ~ 'Fall 2023',
+    `Transaction Date` >= as.POSIXct('2024-01-01') & `Transaction Date` < as.POSIXct('2024-05-15') ~ 'Spring 2024',
+    `Transaction Date` >= as.POSIXct('2024-05-15') & `Transaction Date` < as.POSIXct('2024-08-08') ~ 'Summer 2024',
+    `Transaction Date` >= as.POSIXct('2024-08-08') & `Transaction Date` < as.POSIXct('2025-01-01') ~ 'Fall 2024',
+    `Transaction Date` >= as.POSIXct('2025-01-01') & `Transaction Date` < as.POSIXct('2025-05-15') ~ 'Spring 2025',
+    `Transaction Date` >= as.POSIXct('2025-05-15') & `Transaction Date` < as.POSIXct('2025-08-12') ~ 'Summer 2025',
+    `Transaction Date` >= as.POSIXct('2025-08-12') & `Transaction Date` < as.POSIXct('2026-01-01') ~ 'Fall 2025',
+    `Transaction Date` >= as.POSIXct('2026-01-01') & `Transaction Date` < as.POSIXct('2026-05-15') ~ 'Spring 2026',
+    .default = 'Unknown'
+  ))
+
+cleanPurchases
+```
+
+
+## Join the Purchased Titles to their Requests
+
+NOTE: Not every title can be joined to its request. Some requests do not include title information within them. This is only for titles whose request can be confirmed. The request ticket number will be used as the joining mechanic.
+
+FOR EACH SEMESTER, add to the title list.
+
+
+
+```{r}
+purchasesForJoin <- cleanPurchases |>
+  mutate(Ticket_Number = case_when(
+    Title == '12.12 : the day = Sŏul ŭi pom.' ~ '22951675',
+    Title == 'Afghan star.' ~ '21597504',
+    Title == 'De xian chao fan = All about love /' ~ '23450213',
+    Title == 'Da xiang xi di er zuo = An elephant sitting still.' ~ '23450184',
+    Title == 'Anora.' ~ '23005541',
+    Title == 'Aya of Yop City = Aya de Yopougon.' ~ '22069319',
+    Title == 'Bombay Beach /' ~ '21252503',
+    Title == 'Carving the divine : Buddhist sculptors of Japan /' ~ '22701274',
+    Title == "Zhongguo zui hou yi ge tai jian = Lai Shi, China's last eunuch /" ~ '23450155',
+    Title == "Alfredo's fire." ~ '22082760',
+    Title == 'Fire at sea = Fuocoammare.' ~ '22082753',
+    Title == 'Piazza Fontana : the Italian conspiracy = Romanzo di una strage.' ~ '22082698',
+    Title == 'Rome, open city = Roma, citta aperta.' ~ '22082653',
+    Title == 'Sicilian ghost story.' ~ '22082733',
+    Title == 'The conformist = Il conformista.' ~ '22082634',
+    Title == 'Two women = La ciociara.' ~ '22082640',
+    Title == 'Umberto D.' ~ '22082658',
+    Title == '<Dadiwonisi>.' ~ '21241878',
+    Title == 'Das Leben der Anderen = The lives of others /' ~ '23187746',
+    Title == 'Clara Campoamor : la mujer olvidada /' ~ '21305612',
+    Title == 'Arranged.' ~ '21265486',
+    Title == 'Beautiful boxer = Biutiful boksoe /' ~ '20956228',
+    Title == 'My mis-education in 3 graphics /' ~ '21833844',
+    Title == 'Eames : the architect and the painter /' ~ '21347938',
+    Title == 'Dong gong xi gong = East Palace, West Palace /' ~ '23450195',
+    Title == 'Ban sheng yuan = Eighteen springs /' ~ '23450168',
+    Title == 'Ever after = Endzeit.' ~ '20903706',
+    Title == 'Ba wang bie ji = Farewell my concubine /' ~ '23449148',
+    Title == 'Qing she = Green snake /' ~ '23450161',
+    Title == 'Holding ground : the rebirth of Dudley Street.' ~ '22818926',
+    Title == 'Sophie Scholl die letzten tage = the final days /' ~ '22040683',
+    Title == 'Yang guang can lan de ri zi = In the heat of the sun /' ~ '23450179',
+    Title == 'In the mood for love.' ~ '23449167',
+    Title == "Inside nature's giants." ~ '21557848',
+    Title == 'Zi shu = Intimates /' ~ '23449163',
+    Title == 'The Journey and the Labyrinth: The Music of John Dowland /' ~ '21719702',
+    Title == 'La noire de ... = Black girl.' ~ '23618365',
+    Title == 'Guan yu wo he gui bian cheng jia ren de na jian shi = Marry my dead body /' ~ '23813402',
+    Title == 'Queer China, Comrade China : zhi tong zhi /' ~ '20821773',
+    Title == 'Sugarcane /' ~ '22942737',
+    Title == 'Powerlands /' ~ '21689214',
+    Title == 'Stranger with a Camera' ~ '21402404',
+    Title == 'The African Americans : many rivers to cross /' ~ '20954567',
+    Title == 'The color of fear /' ~ '21894677',
+    Title == 'The hottest August /' ~ '21691725',
+    Title == 'Liang zhu  = Lovers /' ~ '23450150',
+    Title == 'Kumonosujō = Throne of blood.' ~ '21504099',
+    Title == 'To live = Huo zhe /' ~ '22951652',
+    Title == 'Wagner & me.' ~ '21719599',
+    Title == 'We have just begun : the 1919 Elaine Riot, massacre, and dispossession /' ~ '23586317',
+    .default = 'Unknown'
+  ))
+```
+
+
+
+```{r}
+videosAndPurchases <- left_join(allRequests, purchasesForJoin, by = 'Ticket_Number') |>
+  distinct()
+
+videosAndPurchases
+```
+
+
+
+# Load Usage
+
+Usage for films comes from several sources.
+
+
+## Kanopy
+
+
+Usage starts from January 2023.
+
+
+```{r}
+kanopyUsage <- read_excel('Kanopy-DB-Jan2023-Apr2026.xlsx') |>
+  select(`Video Title`, Supplier, Plays) |>
+  mutate(Platform = 'Kanopy',
+         Metric_Type = 'Plays',
+         Plays = ifelse(is.na(Plays) == TRUE, 0, Plays))
+
+kanopyUsage
+```
+
+
+
+### Usage Joining to the Video Requests
+
+
+```{r}
+kanopyForRequestJoin <- kanopyUsage |>
+  mutate(Ticket_Number = case_when(
+    `Video Title` == '12.12: The Day' ~ '22951675',
+    `Video Title` == 'Save The Green Planet' ~ '23633286',
+    `Video Title` == 'Afghan Star' ~ '21597504',
+    `Video Title` == 'An Elephant Sitting Still' ~ '23450184',
+    `Video Title` == 'Anora' ~ '23005541',
+    `Video Title` == 'Biology!' ~ '21203745',
+    `Video Title` == 'The Blue Kite' ~ '23449108',
+    `Video Title` == 'Casablanca' ~ '23636738',
+    `Video Title` == "Alfredo's Fire" ~ '22082760',
+    `Video Title` == 'Fire At Sea' ~ '22082753',
+    `Video Title` == 'Piazza Fontana: The Italian Conspiracy' ~ '22082698',
+    `Video Title` == 'Rome Open City' ~ '22082653',
+    `Video Title` == 'Sicilian Ghost Story' ~ '22082733',
+    `Video Title` == 'The Conformist' ~ '22082634',
+    `Video Title` == 'Two Women' ~ '22082640',
+    `Video Title` == 'Umberto D.' ~ '22082658',
+    `Video Title` == 'Dadiwonisi (We Will Speak)' ~ '21241878',
+    `Video Title` == 'Enron' ~ '23390608',
+    `Video Title` == 'Ever After' ~ '20903706',
+    `Video Title` == 'Fair Play' & Supplier == 'Gravitas Ventures' ~ '23799256',
+    `Video Title` == 'Farewell Disco' ~ '21244427',
+    `Video Title` == 'Farewell My Concubine' ~ '23449148',
+    `Video Title` == 'Holding Ground' ~ '22818926',
+    `Video Title` == 'In the Mood for Love' ~ '23449167',
+    `Video Title` == 'Denial' ~ '23138604',
+    `Video Title` == 'King Coal' ~ '21737783',
+    `Video Title` == 'Black Girl' ~ '23618365',
+    `Video Title` == 'Nosferatu' ~ '23215656',
+    `Video Title` == 'The Princess of Montpensier' ~ '21769916',
+    `Video Title` == 'Throne of Blood' ~ '21504099',
+    `Video Title` == 'Wagner & Me' ~ '21719599',
+    .default = 'Unknown'
+  ))
+
+kanopyForRequestJoin
+```
+
+
+
+
+```{r}
+videoRequestKanopy <- left_join(videosAndPurchases, kanopyForRequestJoin, by = 'Ticket_Number')
+
+videoRequestKanopy
+```
+
+
+
+### Usage Joining: Video Purchases
+
+
+
+```{r}
+kanopyForPurchaseJoin <- kanopyUsage |>
+  mutate(`MMS Id` = case_when(
+    `Video Title` == 'Welcome Mr. Marshall!' ~ '9926568386902311',
+    `Video Title` == '12.12: The Day' ~ '9926679661602311',
+    `Video Title` == 'A Woman Under the Influence' ~ '9926749916202311',
+    `Video Title` == 'Afghan Star' ~ '9926602687602311',
+    `Video Title` == "Alfredo's Fire" ~ '9926647585802311',
+    `Video Title` == 'American Mystic' ~ '9926060846902311',
+    `Video Title` == 'An Autumn Afternoon' ~ '9926508586902311',
+    `Video Title` == 'Anora' ~ '9926784949102311',
+    `Video Title` == 'Arranged' ~ '9926535785602311',
+    `Video Title` == 'The Edge of Heaven' ~ '9926568986302311',
+    `Video Title` == 'Autumn Sonata' ~ '9926794740602311',
+    `Video Title` == 'Aya of Yop City' ~ '9926679660602311',
+    `Video Title` == 'Farewell My Concubine' ~ '9926736520602311',
+    `Video Title` == 'Banquet for Achilles' ~ '9926853048802311',
+    `Video Title` == 'In Between' ~ '9926405387502311',
+    `Video Title` == 'Barefoot Gen' ~ '9926796740702311',
+    `Video Title` == 'Beau Travail' ~ '9926508583102311',
+    `Video Title` == 'Chan Is Missing' ~ '9926639888102311',
+    `Video Title` == 'Close-Up' ~ '9926858248702311',
+    `Video Title` == 'Cuban Roots/Bronx Stories' ~ '9926691280702311',
+    `Video Title` == 'An Elephant Sitting Still' ~ '9926838178502311',
+    `Video Title` == 'Daisies' ~ '9926629476402311',
+    `Video Title` == 'Death of a Salesman' ~ '9926479788102311',
+    `Video Title` == 'Her Third' ~ '9926618285402311',
+    `Video Title` == 'The Murderers are Among Us' ~ '9925706544802311',
+    `Video Title` == 'Divorce Italian Style' ~ '9926573586602311',
+    `Video Title` == 'The Spirit of the Beehive' ~ '9926567587902311',
+    `Video Title` == 'Ever After' ~ '9926477487402311',
+    `Video Title` == 'Fire At Sea' ~ '9926647586102311',
+    `Video Title` == 'Miss Butterfly' ~ '9926552087502311',
+    `Video Title` == 'Fruits of Labor' ~ '9926535785102311',
+    `Video Title` == 'Germinal' ~ '9925859012702311',
+    `Video Title` == 'The Witch' ~ '9926777908502311',
+    `Video Title` == 'Hot Summer' ~ '9925706552802311',
+    `Video Title` == 'Hiroshima Mon Amour' ~ '9926601086502311',
+    `Video Title` == 'Holding Ground' ~ '9926749916802311',
+    `Video Title` == 'In the Mood for Love' ~ '9925882848602311',
+    `Video Title` == "It's A Girl" ~ '9926003767502311',
+    `Video Title` == 'Jacob the Liar' ~ '9926908825902311',
+    `Video Title` == 'Jeanne Dielman, 23 Commerce Quay, 1080 Brussels' ~ '9926749916702311',
+    `Video Title` == 'Carla' ~ '9926552087302311',
+    `Video Title` == 'Killer of Sheep' ~ '9926332687902311',
+    `Video Title` == 'In This Corner (and Other Corners) of the World' ~ '9926853047802311',
+    `Video Title` == 'Throne of Blood' ~ '9925859012602311',
+    `Video Title` == 'La Jetée' ~ '9926601086602311',
+    `Video Title` == 'La Llorona' ~ '9926824832702311',
+    `Video Title` == 'Black Girl' ~ '9926858848902311',
+    `Video Title` == 'The Bride' ~ '9926568387202311',
+    `Video Title` == 'Late Spring' ~ '9926749916002311',
+    `Video Title` == 'M' ~ '9926853048402311',
+    `Video Title` == 'Martirio' ~ '9926697079302311',
+    `Video Title` == 'Memories of Underdevelopment' ~ '9926602683302311',
+    `Video Title` == 'Meshes of the Afternoon' ~ '9926784949902311',
+    `Video Title` == 'Millennium Actress' ~ '9926796739902311',
+    `Video Title` == 'Mississippi Masala' ~ '9926479785902311',
+    `Video Title` == 'Modern Times' ~ '9926858248902311',
+    `Video Title` == 'Moonlight' ~ '9926065040302311',
+    `Video Title` == 'Naples in Veils' ~ '9926573586502311',
+    `Video Title` == 'Neighbors' ~ '9926601087302311',
+    `Video Title` == 'Opening Night' ~ '9926794740402311',
+    `Video Title` == 'Piazza Fontana: The Italian Conspiracy' ~ '9926647586202311',
+    `Video Title` == 'Portrait of a Lady On Fire' ~ '9926479786302311',
+    `Video Title` == 'Quilombo' ~ '9926602683102311',
+    `Video Title` == 'Rafiki' ~ '9926858248802311',
+    `Video Title` == 'Rashomon' ~ '9925882848302311',
+    `Video Title` == 'Rome Open City' ~ '9926647586602311',
+    `Video Title` == 'Afire' ~ '9926823333502311',
+    `Video Title` == 'Salt of the Earth' ~ '9926601087102311',
+    `Video Title` == 'Seven Samurai' ~ '9926749916602311',
+    `Video Title` == 'Sicilian Ghost Story' ~ '9926647586402311',
+    `Video Title` == 'Somewhere in Berlin' ~ '9926417987902311',
+    `Video Title` == 'Sun Seekers' ~ '9926552087602311',
+    `Video Title` == 'Tampopo' ~ '9926508586802311',
+    `Video Title` == 'Taste of Cherry' & Supplier == 'The Criterion Collection' ~ '9926749916102311',
+    `Video Title` == 'The Best Years of Our Lives' ~ '9926601087202311',
+    `Video Title` == 'The Bridge' & Supplier == 'Kino Lorber' ~ '9925800069502311',
+    `Video Title` == 'The Conformist' ~ '9926647586902311',
+    `Video Title` == "The Emperor's Naked Army Marches On" ~ '9926853047902311',
+    `Video Title` == 'The Graduate' ~ '9926601087002311',
+    `Video Title` == 'The Hours And Times' ~ '9926749916502311',
+    `Video Title` == 'The Juniper Tree' ~ '9926777908602311',
+    `Video Title` == 'The Kid' ~ '9926749916402311',
+    `Video Title` == 'The Lost Honor of Katharina Blum' ~ '9926415179102311',
+    `Video Title` == 'The Official Story' ~ '9926824832602311',
+    `Video Title` == "The People's Joker" ~ '9926725589502311',
+    `Video Title` == 'Prison Within' ~ '9926679661002311',
+    `Video Title` == 'The Story of Little Mook' ~ '9926415179002311',
+    `Video Title` == 'The Third Man' ~ '9926853048302311',
+    `Video Title` == 'The Trials of Muhammad Ali' ~ '9926629483302311',
+    `Video Title` == 'The Way He Looks' ~ '9926479786002311',
+    `Video Title` == 'The Young Karl Marx' ~ '9925981470002311',
+    `Video Title` == 'Three Sovereigns for Sarah' ~ '9926777908402311',
+    `Video Title` == 'Tokyo Story' ~ '9926629486702311',
+    `Video Title` == 'Tony Takitani' ~ '9926796740202311',
+    `Video Title` == 'Touki Bouki' ~ '9926479785502311',
+    `Video Title` == 'Two Women' ~ '9926647586302311',
+    `Video Title` == 'Umberto D.' ~ '9926647586702311',
+    `Video Title` == 'Chinese Take-Away' ~ '9926479786202311',
+    `Video Title` == 'A Summer In La Goulette' ~ '9926552086002311',
+    `Video Title` == 'Wagner & Me' ~ '9926606588102311',
+    `Video Title` == 'Wings of Desire' ~ '9926904132702311',
+    `Video Title` == 'Within Our Gates' ~ '9926629380402311',
+    `Video Title` == 'Woman in the Dunes' ~ '9926796740502311',
+    `Video Title` == 'Women Without Men' ~ '9926606586702311',
+    `Video Title` == 'Xingu' ~ '9926479786102311',
+    `Video Title` == 'I, the Worst of All' ~ '9926479786402311',
+    `Video Title` == 'Yojimbo' ~ '9926453387202311',
+    `Video Title` == 'Young Törless' ~ '9926629477002311',
+    .default = 'Unknown'
+  ))
+
+kanopyForPurchaseJoin
+```
+
+
+
+```{r}
+videoPurchaseKanopy <- left_join(cleanPurchases, kanopyForPurchaseJoin, by = 'MMS Id')
+```
+
+
+
+
+
+## Docuseek
+
+
+Usage starts from January 2023.
+
+```{r}
+docuseekUsage <- read_excel('Docuseek-IRM1-Jan2023-Apr2026.xlsx') |>
+  filter(Metric_Type == 'Total_Item_Requests') |>
+  mutate(Platform = 'Docuseek') |>
+  select(Item, Platform, Reporting_Period_Total)
+
+docuseekUsage
+```
+
+
+
+
+### Usage Joining to the Video Requests
+
+
+```{r}
+docuseekForRequestJoin <- docuseekUsage |>
+  mutate(Ticket_Number = case_when(
+    Item == 'Powerlands' ~ '21689214',
+    Item == "Queer China, 'Comrade' China" ~ '20821773',
+    .default = 'Unknown'
+  ))
+
+docuseekForRequestJoin
+```
+
+
+
+
+```{r}
+videoRequestDocuseek <- left_join(videoRequestKanopy, docuseekForRequestJoin, by = 'Ticket_Number')
+
+videoRequestDocuseek
+```
+
+
+
+### Usage Joining: Video Purchases
+
+
+
+```{r}
+docuseekForPurchaseJoin <- docuseekUsage |>
+  mutate(`MMS Id` = case_when(
+    Item == 'Bamako' ~ '9926479782002311',
+    Item == "Can't Do It In Europe" ~ '9924096520102311',
+    Item == 'Dido and Aeneas' ~ '9926708295802311',
+    Item == "Lotman's World" ~ '9926494384902311',
+    Item == 'Miúcha, the Voice of Bossa Nova' ~ '9926708295702311',
+    Item == 'Powerlands' ~ '9926602681302311',
+    Item == 'The Light in Her Eyes' ~ '9926454782902311',
+    Item == "Queer China, 'Comrade' China" ~ '9926454782902311',
+    .default = 'Unknown'
+  ))
+
+docuseekForPurchaseJoin
+```
+
+
+
+```{r}
+videoPurchaseDocuseek <- left_join(videoPurchaseKanopy, docuseekForPurchaseJoin, by = 'MMS Id')
+
+videoPurchaseDocuseek
+```
+
+
+
+
+
+
+
+
+
+
+## Alma Digital
+
+
+This is for all films and will need to be filtered down. When joining to the purchases, it can be done via MMS ID. Joining to the requests will take more work.
+
+
+Usage starts from January 2023.
+
+
+```{r}
+almaDigitalUsage <- read_excel('Classroom Digital Film Usage May 11.xlsx') |>
+  group_by(`MMS Id`) |>
+  summarise(Title = Title[1],
+            File_Views = sum(`Num of digital file views`)) |>
+  ungroup() |>
+  mutate(Platform = 'Alma Digital') |>
+  mutate(File_Views = case_when(
+    Title == 'Morristown : in the air and sun = en el aire y el sol /' ~ 32,
+    .default = File_Views
+  ))
+
+almaDigitalUsage
+```
+
+
+
+
+### Usage Joining to the Video Requests
+
+
+```{r}
+almaDigitalForRequestJoin <- almaDigitalUsage |>
+  mutate(Ticket_Number = case_when(
+    Title == 'Shall we dansu? /' ~ '23531257',
+    Title == 'Lan feng cheng The blue kite /' ~ '23449108',
+    Title == 'Carving the divine : Buddhist sculptors of Japan /' ~ '22701274',
+    Title == 'Category : woman /' ~ '20838067',
+    Title == 'Clara Campoamor : la mujer olvidada /' ~ '21305612',
+    Title == 'Morristown : in the air and sun = en el aire y el sol /' ~ '20901321',
+    Title == 'My mis-education in 3 graphics /' ~ '21833844',
+    Title == 'Eames : the architect and the painter /' ~ '21347938',
+    Title == 'Abschiedsdisco = Farewell disco /' ~ '21244427',
+    Title == 'Fire /' ~ '20956194',
+    Title == 'Stranger with a camera /' ~ '21402404',
+    Title == 'The hottest August /' ~ '21691725',
+    Title == 'We have just begun : the 1919 Elaine Riot, massacre, and dispossession /' ~ '23586317',
+    .default = 'Unknown'
+  ))
+
+almaDigitalForRequestJoin
+```
+
+
+
+
+```{r}
+videoRequestAlmaDigital <- left_join(videoRequestDocuseek, almaDigitalForRequestJoin, by = 'Ticket_Number')
+
+videoRequestAlmaDigital
+```
+
+
+
+### Usage Joining: Video Purchases
+
+
+
+
+```{r}
+videoPurchaseAlmaDigital <- left_join(videoPurchaseDocuseek, almaDigitalUsage, by = 'MMS Id')
+
+videoPurchaseAlmaDigital
+```
+
+
+
+
+
+
+
+## SWANK Digital Campus
+
+Usage starts from November 2023.
+
+
+```{r}
+swankUsage <- read_excel('DigitalCampus-DB-Jan2023-Apr2026.xlsx', skip = 5) |>
+  select(Title, Platform, `Reporting Period Total Views`) |>
+  group_by(Title, Platform) |>
+  summarise(`Reporting Period Total Views` = sum(`Reporting Period Total Views`)) |>
+  ungroup() |>
+  mutate(Metric_Type = 'Title Playbacks',
+         Platform = 'SWANK Digital Campus')
+
+swankUsage
+```
+
+
+
+
+
+### Usage Joining to the Video Requests
+
+There are currently no SWANK titles that line up with requests, but in the future, they would go here.
+
+```{r}
+#swankForRequestJoin <- swankUsage |>
+#  mutate(Ticket_Number = case_when(
+#    .default = 'Unknown'
+#  ))
+
+#swankForRequestJoin
+```
+
+
+
+
+```{r}
+#videoRequestSwank <- left_join(videoRequestAlmaDigital, swankForRequestJoin, by = 'Ticket_Number')
+
+videoRequestSwank <- videoRequestAlmaDigital 
+
+videoRequestSwank
+```
+
+
+
+### Usage Joining: Video Purchases
+
+
+
+```{r}
+swankForPurchaseJoin <- swankUsage |>
+  mutate(`MMS Id` = case_when(
+    Title == 'Hard Target' ~ '9926454886702311',
+    Title == 'Last Man Standing' ~ '9926454886802311',
+    Title == 'Love Lies Bleeding' ~ '9926858248202311',
+    Title == 'The Two Jakes' ~ '9926602681102311',
+    .default = 'Unknown'
+  ))
+
+swankForPurchaseJoin
+```
+
+
+
+```{r}
+videoPurchaseSwank <- left_join(videoPurchaseAlmaDigital, swankForPurchaseJoin, by = 'MMS Id')
+
+videoPurchaseSwank
+```
+
+
+
+
+
+
+
+## Physical Films
+
+Sometimes, physical films are bought for classroom use. This will contain their physical loan usage.
+
+Just like the Alma Digital items, the usage joining can be done by MMS Id directly. 
+
+All usage will be loans in the last 3 years from the day the file was downloaded, or since purchase if the item was purchased within the last 3 years.
+
+
+```{r}
+physicalUsage <- read_excel('Usage of Physical Films Bought for Classroom Use May 11.xlsx') |>
+  select(Title, `MMS Id`, `Num of Loans Last 3 Years`) |>
+  mutate(Metric_Type = 'Physical Loans',
+         Platform = 'Physical Library') |>
+  mutate(`Num of Loans Last 3 Years` = case_when(
+    `MMS Id` == '9926586378502311' ~ 4,
+    .default = `Num of Loans Last 3 Years`
+  ))
+
+physicalUsage
+```
+
+
+
+
+
+### Usage Joining to the Video Requests
+
+
+
+```{r}
+physicalForRequestJoin <- physicalUsage |>
+  mutate(Ticket_Number = case_when(
+    Title == 'De xian chao fan = All about love /' ~ '23450213',
+    Title == 'Bombay Beach /' ~ '21252503',
+    Title == "Calling and recalling : the sentiments of women's script (Nüshu) /" ~ '22789959',
+    Title == "Zhongguo zui hou yi ge tai jian = Lai Shi, China's last eunuch /" ~ '23450155',
+    Title == 'Beautiful boxer = Biutiful boksoe /' ~ '20956228',
+    Title == 'Dong gong xi gong = East Palace, West Palace /' ~ '23450195',
+    Title == 'Ban sheng yuan = Eighteen springs /' ~ '23450168',
+    Title == 'Qing she = Green snake /' ~ '23450161',
+    Title == 'Sophie Scholl die letzten tage = the final days /' ~ '22040683',
+    Title == 'Yang guang can lan de ri zi = In the heat of the sun /' ~ '23450179',
+    Title == "Inside nature's giants." ~ '21557848',
+    Title == 'Zi shu = Intimates /' ~ '23449163',
+    Title == 'Guan yu wo he gui bian cheng jia ren de na jian shi = Marry my dead body /' ~ '23813402',
+    Title == 'Sugarcane /' ~ '22942737',
+    Title == 'The African Americans : many rivers to cross /' ~ '20954567',
+    Title == 'Liang zhu  = Lovers /' ~ '23450150',
+    Title == 'The story of Qiu Ju = Qiuju da guan si /' ~ '23449126',
+    `MMS Id` == '9926586378502311' ~ '20848726',
+    Title == 'To live = Huo zhe /' ~ '22951652',
+    .default = 'Unknown'
+  ))
+
+physicalForRequestJoin
+```
+
+
+
+
+```{r}
+videoRequestAll <- left_join(videoRequestSwank, physicalForRequestJoin, by = 'Ticket_Number')
+
+videoRequestAll
+```
+
+
+
+### Usage Joining: Video Purchases
+
+
+
+```{r}
+videoPurchaseAll <- left_join(videoPurchaseSwank, physicalUsage, by = 'MMS Id')
+
+videoPurchaseAll
+```
+
+
+
+
+
+
+# Check for Missing Information and Clean Excess Columns
+
+
+This will be used to find any titles whose usage is not accounted for, or to see if any requests that may have usage were not properly found. After making those checks, the Purchase and Request files will be cleaned up so any usage, purchase, and platform info is in one column.
+
+
+## Video Request List
+
+```{r}
+cleanRequestList <- videoRequestAll |>
+  mutate(Unified_Platform = case_when(
+    is.na(Platform.x) == FALSE ~ 'Kanopy',
+    is.na(Platform.y) == FALSE ~ 'Docuseek',
+    is.na(Platform.x.x) == FALSE ~ 'Alma Digital',
+    is.na(Platform.y.y) == FALSE ~ 'Physical Library',
+    .default = NA
+  ),
+            Unified_Metric_Type = case_when(
+    is.na(Plays) == FALSE ~ 'Plays',
+    is.na(Reporting_Period_Total) == FALSE ~ 'Total Item Requests',
+    is.na(File_Views) == FALSE ~ 'File Views',
+    is.na(`Num of Loans Last 3 Years`) == FALSE ~ 'Physical Loans',
+    .default = NA
+  ),
+        Unified_Usage = case_when(
+    is.na(Plays) == FALSE ~ Plays,
+    is.na(Reporting_Period_Total) == FALSE ~ Reporting_Period_Total,
+    is.na(File_Views) == FALSE ~ File_Views,
+    is.na(`Num of Loans Last 3 Years`) == FALSE ~ `Num of Loans Last 3 Years`,
+    .default = NA
+  )
+) |>
+  select(Ticket_Number, Title_of_Request, Instructor, Course, Class_Semester, Title_Count_in_Request, Ticket_Received_Semester, `Transaction Amount`, Purchased_Semester, Unified_Platform, Unified_Metric_Type, Unified_Usage)
+
+for(i in 1:dim(cleanRequestList)[1]){
+  if(is.na(as.numeric(cleanRequestList$Class_Semester[i])) == FALSE){
+    cleanRequestList$Title_Count_in_Request[i] <- cleanRequestList$Class_Semester[i]
+    cleanRequestList$Class_Semester[i] <- cleanRequestList$Course[i]
+    cleanRequestList$Course[i] <- cleanRequestList$Title_of_Request[i]
+  }
+}
+
+cleanRequestList
+```
+
+
+
+## Add in Information for PowerBI Purposes
+
+
+```{r, warning = FALSE}
+cleanRequestList2 <- cleanRequestList |>
+  mutate(CourseNumbers = str_extract_all(Course, "\\(?[0-9,.]+\\)?"))
+
+
+for(i in 1:dim(cleanRequestList2)[1]){
+  cleanRequestList2$Number1[i] <- case_when(
+    is.na(str_trim(gsub("[^[:alnum:]_]", "", cleanRequestList2$CourseNumbers[i][[1]][1]))) == TRUE ~ 0,
+    as.numeric(str_trim(gsub("[^[:alnum:]_]", "", cleanRequestList2$CourseNumbers[i][[1]][1]))) > 1000 ~ 0,
+    .default = as.numeric(str_trim(gsub("[^[:alnum:]_]", "", cleanRequestList2$CourseNumbers[i][[1]][1])))
+  )
+  cleanRequestList2$Number2[i] <- case_when(
+    is.na(str_trim(gsub("[^[:alnum:]_]", "", cleanRequestList2$CourseNumbers[i][[1]][2]))) == TRUE ~ 0,
+    as.numeric(str_trim(gsub("[^[:alnum:]_]", "", cleanRequestList2$CourseNumbers[i][[1]][2]))) > 1000 ~ 0,
+    .default = as.numeric(str_trim(gsub("[^[:alnum:]_]", "", cleanRequestList2$CourseNumbers[i][[1]][2])))
+  )
+  cleanRequestList2$Number3[i] <- case_when(
+    is.na(str_trim(gsub("[^[:alnum:]_]", "", cleanRequestList2$CourseNumbers[i][[1]][3]))) == TRUE ~ 0,
+    as.numeric(str_trim(gsub("[^[:alnum:]_]", "", cleanRequestList2$CourseNumbers[i][[1]][3]))) > 1000 ~ 0,
+    .default = as.numeric(str_trim(gsub("[^[:alnum:]_]", "", cleanRequestList2$CourseNumbers[i][[1]][3])))
+  )
+  cleanRequestList2$Number4[i] <- case_when(
+    is.na(str_trim(gsub("[^[:alnum:]_]", "", cleanRequestList2$CourseNumbers[i][[1]][4]))) == TRUE ~ 0,
+    as.numeric(str_trim(gsub("[^[:alnum:]_]", "", cleanRequestList2$CourseNumbers[i][[1]][4]))) > 1000 ~ 0,
+    .default = as.numeric(str_trim(gsub("[^[:alnum:]_]", "", cleanRequestList2$CourseNumbers[i][[1]][4])))
+  )
+  cleanRequestList2$Number5[i] <- case_when(
+    is.na(str_trim(gsub("[^[:alnum:]_]", "", cleanRequestList2$CourseNumbers[i][[1]][5]))) == TRUE ~ 0,
+    as.numeric(str_trim(gsub("[^[:alnum:]_]", "", cleanRequestList2$CourseNumbers[i][[1]][5]))) > 1000 ~ 0,
+    .default = as.numeric(str_trim(gsub("[^[:alnum:]_]", "", cleanRequestList2$CourseNumbers[i][[1]][5])))
+  )
+  cleanRequestList2$Number6[i] <- case_when(
+    is.na(str_trim(gsub("[^[:alnum:]_]", "", cleanRequestList2$CourseNumbers[i][[1]][6]))) == TRUE ~ 0,
+    as.numeric(str_trim(gsub("[^[:alnum:]_]", "", cleanRequestList2$CourseNumbers[i][[1]][6]))) > 1000 ~ 0,
+    .default = as.numeric(str_trim(gsub("[^[:alnum:]_]", "", cleanRequestList2$CourseNumbers[i][[1]][6])))
+  )
+  cleanRequestList2$Number7[i] <- case_when(
+    is.na(str_trim(gsub("[^[:alnum:]_]", "", cleanRequestList2$CourseNumbers[i][[1]][7]))) == TRUE ~ 0,
+    as.numeric(str_trim(gsub("[^[:alnum:]_]", "", cleanRequestList2$CourseNumbers[i][[1]][7]))) > 1000 ~ 0,
+    .default = as.numeric(str_trim(gsub("[^[:alnum:]_]", "", cleanRequestList2$CourseNumbers[i][[1]][7])))
+  )
+  cleanRequestList2$Number8[i] <- case_when(
+    is.na(str_trim(gsub("[^[:alnum:]_]", "", cleanRequestList2$CourseNumbers[i][[1]][8]))) == TRUE ~ 0,
+    as.numeric(str_trim(gsub("[^[:alnum:]_]", "", cleanRequestList2$CourseNumbers[i][[1]][8]))) > 1000 ~ 0,
+    .default = as.numeric(str_trim(gsub("[^[:alnum:]_]", "", cleanRequestList2$CourseNumbers[i][[1]][8])))
+  )
+  cleanRequestList2$Number9[i] <- case_when(
+    is.na(str_trim(gsub("[^[:alnum:]_]", "", cleanRequestList2$CourseNumbers[i][[1]][9]))) == TRUE ~ 0,
+    as.numeric(str_trim(gsub("[^[:alnum:]_]", "", cleanRequestList2$CourseNumbers[i][[1]][9]))) > 1000 ~ 0,
+    .default = as.numeric(str_trim(gsub("[^[:alnum:]_]", "", cleanRequestList2$CourseNumbers[i][[1]][9])))
+  )
+  cleanRequestList2$Number10[i] <- case_when(
+    is.na(str_trim(gsub("[^[:alnum:]_]", "", cleanRequestList2$CourseNumbers[i][[1]][10]))) == TRUE ~ 0,
+    as.numeric(str_trim(gsub("[^[:alnum:]_]", "", cleanRequestList2$CourseNumbers[i][[1]][10]))) > 1000 ~ 0,
+    .default = as.numeric(str_trim(gsub("[^[:alnum:]_]", "", cleanRequestList2$CourseNumbers[i][[1]][10])))
+  )
+  cleanRequestList2$Number11[i] <- case_when(
+    is.na(str_trim(gsub("[^[:alnum:]_]", "", cleanRequestList2$CourseNumbers[i][[1]][11]))) == TRUE ~ 0,
+    as.numeric(str_trim(gsub("[^[:alnum:]_]", "", cleanRequestList2$CourseNumbers[i][[1]][11]))) > 1000 ~ 0,
+    .default = as.numeric(str_trim(gsub("[^[:alnum:]_]", "", cleanRequestList2$CourseNumbers[i][[1]][11])))
+  )
+}
+
+cleanRequestList3 <- cleanRequestList2 |>
+  mutate(is100 = ifelse(
+      (Number1 >= 100 & Number1 <= 299) |
+      (Number2 >= 100 & Number2 <= 299) |
+      (Number3 >= 100 & Number3 <= 299) |
+      (Number4 >= 100 & Number4 <= 299) |
+      (Number5 >= 100 & Number5 <= 299) |
+      (Number6 >= 100 & Number6 <= 299) |
+      (Number7 >= 100 & Number7 <= 299) |
+      (Number8 >= 100 & Number8 <= 299) |
+      (Number9 >= 100 & Number9 <= 299) |
+      (Number10 >= 100 & Number10 <= 299) |
+      (Number11 >= 100 & Number11 <= 299), 1, 0
+        ),
+        is300 = ifelse(
+      (Number1 >= 300 & Number1 <= 499) |
+      (Number2 >= 300 & Number2 <= 499) |
+      (Number3 >= 300 & Number3 <= 499) |
+      (Number4 >= 300 & Number4 <= 499) |
+      (Number5 >= 300 & Number5 <= 499) |
+      (Number6 >= 300 & Number6 <= 499) |
+      (Number7 >= 300 & Number7 <= 499) |
+      (Number8 >= 300 & Number8 <= 499) |
+      (Number9 >= 300 & Number9 <= 499) |
+      (Number10 >= 300 & Number10 <= 499) |
+      (Number11 >= 300 & Number11 <= 499), 1, 0          
+        ),
+        is500 = ifelse(
+              Number1 >= 500 |
+              Number2 >= 500 |
+              Number3 >= 500 |
+              Number4 >= 500 |
+              Number5 >= 500 |
+              Number6 >= 500 |
+              Number7 >= 500 |
+              Number8 >= 500 |
+              Number9 >= 500 |
+              Number10 >= 500 |
+              Number11 >= 500 , 1, 0             
+        ),
+        isUnknown = ifelse(
+                              Number1 == 0 &
+                              Number2 == 0 &
+                              Number3 == 0 &
+                              Number4 == 0 &
+                              Number5 == 0 &
+                              Number6 == 0 &
+                              Number7 == 0 &
+                              Number8 == 0 &
+                              Number9 == 0 &
+                              Number10 == 0 &
+                              Number11 == 0 , 1, 0            
+        )
+  ) |>
+  mutate(Title_Count_in_Request = case_when(
+          is.na(Title_Count_in_Request) == TRUE ~ 0, 
+          Title_Count_in_Request == '19 clips from 7 tapes in series' ~ 7,
+          .default = as.numeric(Title_Count_in_Request)
+         )) |>
+  select(Ticket_Number, Title_of_Request, Instructor, Course, Class_Semester, Title_Count_in_Request, Ticket_Received_Semester, `Transaction Amount`, Purchased_Semester, Unified_Platform, Unified_Metric_Type, Unified_Usage, is100, is300, is500, isUnknown)
+
+cleanRequestList3
+```
+
+
+## Video Purchase List
+
+```{r}
+cleanPurchaseList <- videoPurchaseAll |>
+  mutate(Unified_Platform = case_when(
+    is.na(Platform.x) == FALSE ~ 'Kanopy',
+    is.na(Platform.y) == FALSE ~ 'Docuseek',
+    is.na(Platform.y.y) == FALSE ~ 'SWANK Digital Campus',
+    is.na(Platform.x.x) == FALSE ~ 'Alma Digital',
+    is.na(Platform) == FALSE & is.na(Title.y) == TRUE ~ 'Physical Library',
+    .default = NA
+  ),
+          Unified_Metric_Type = case_when(
+    is.na(Plays) == FALSE ~ 'Plays',
+    is.na(Reporting_Period_Total) == FALSE ~ 'Total Item Requests',
+    is.na(File_Views) == FALSE ~ 'File Views',
+    is.na(`Reporting Period Total Views`) == FALSE ~ 'Title Playbacks',
+    is.na(`Num of Loans Last 3 Years`) == FALSE ~ 'Last 3 Year Loans',
+    .default = NA
+  ),
+        Unified_Usage = case_when(
+    is.na(Plays) == FALSE ~ Plays,
+    is.na(Reporting_Period_Total) == FALSE ~ Reporting_Period_Total,
+    is.na(File_Views) == FALSE ~ File_Views,
+    is.na(`Reporting Period Total Views`) == FALSE ~ `Reporting Period Total Views`,
+    is.na(`Num of Loans Last 3 Years`) == FALSE ~ `Num of Loans Last 3 Years`,
+    .default = NA
+  )
+) |>
+  select(Title.x, `MMS Id`, `Transaction Date`, `Transaction Amount`, Purchased_Semester, Unified_Platform, Unified_Metric_Type, Unified_Usage) |>
+  mutate(Unified_Platform = ifelse(is.na(Unified_Platform) == TRUE, 'Could Not be Found', Unified_Platform),
+         Unified_Metric_Type = ifelse(is.na(Unified_Metric_Type) == TRUE, 'Unknown', Unified_Metric_Type)) |>
+  mutate(Cost_Use = case_when(
+    is.na(Unified_Usage) == TRUE ~ NA,
+    Unified_Usage == 0 ~ NA,
+    .default = `Transaction Amount` / ((36 * Unified_Usage)  / interval(`Transaction Date`, Sys.Date()) %/% months(1)) )
+)
+cleanPurchaseList
+```
+
+
+
+```{r}
+write_xlsx(cleanRequestList3, 'Classroom Film Request Report.xlsx')
+write_xlsx(cleanPurchaseList, 'Classroom Film Purchase Report.xlsx')
+```
+
+

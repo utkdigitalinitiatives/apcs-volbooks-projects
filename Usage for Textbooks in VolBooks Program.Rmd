@@ -1,0 +1,2176 @@
+---
+title: "Usage for Textbooks Bought for VolBooks Fall 2024 to Spring 2026"
+author: "Alexander Harriman"
+date: "2025-11-26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+This file combines usage data from the usage database with the other metrics calculated from the Textbook Tracking Sheet to create a PowerBI report of the value and reach of the VolBooks-Libraries parternship as part of the Total Access Program.
+
+The Textbook Tracking Sheet is necessary for the Alma-specific snapshots in time data. That sheet can be found here: https://liveutk.sharepoint.com/:x:/r/sites/UTLibraryAssessmentProgramsCollectionStrategy/_layouts/15/Doc.aspx?sourcedoc=%7B20A3FEE4-BC62-47BE-BA09-FBC33A8E64AF%7D&file=Textbook%20Tracking%20Sheet.xlsx&action=default&mobileredirect=true
+
+This file has the per-semester usage correct up to Spring 2026.
+
+
+Throughout this file, things that need to be updated for each new semester will be documented with what steps need to be taken.
+
+
+```{r, warning = FALSE}
+library(readxl)
+library(dplyr)
+library(readr)
+library(openxlsx)
+library(ggplot2)
+library(gt)
+library(stringr)
+library(tidyr)
+library(writexl)
+library(RSQLite)
+library(DBI)
+library(xml2)
+library(rvest)
+```
+
+
+
+# Load the Bookstore Books for Each Semester
+
+
+This should have the final list sent to VolBooks for each semester; if you are actively creating lists, wait until the last one is created.
+
+
+FOR EACH NEW SEMESTER, copy the code block (not for Spring 2024) and edit the variable names to show each semester.
+
+```{r, warning = FALSE}
+booksSpring24 <- read_excel('Final Spring 2024 Bookstore List Apr 11.xlsx') |>
+  mutate(`Section Code` = `Course Code`) 
+
+for(i in 1:dim(booksSpring24)[1]){
+  booksSpring24$`Course Code`[i] <- case_when(
+    nchar(str_split(str_split(booksSpring24$`Section Code`[i], '-')[[1]][2], '\\.')[[1]][1]) == 4 ~ substr(booksSpring24$`Section Code`[i], 8, 15),
+    nchar(str_split(str_split(booksSpring24$`Section Code`[i], '-')[[1]][2], '\\.')[[1]][1]) == 3 ~ substr(booksSpring24$`Section Code`[i], 8, 14),
+    nchar(str_split(str_split(booksSpring24$`Section Code`[i], '-')[[1]][2], '\\.')[[1]][1]) == 2 ~ substr(booksSpring24$`Section Code`[i], 8, 13)
+  )
+  
+  booksSpring24$`Subject Area`[i] <- case_when(
+    nchar(str_split(str_split(booksSpring24$`Section Code`[i], '-')[[1]][2], '\\.')[[1]][1]) == 4 ~ substr(booksSpring24$`Section Code`[i], 8, 11),
+    nchar(str_split(str_split(booksSpring24$`Section Code`[i], '-')[[1]][2], '\\.')[[1]][1]) == 3 ~ substr(booksSpring24$`Section Code`[i], 8, 10),
+    nchar(str_split(str_split(booksSpring24$`Section Code`[i], '-')[[1]][2], '\\.')[[1]][1]) == 2 ~ substr(booksSpring24$`Section Code`[i], 8, 9)
+  )
+}
+  booksSpring24 <- booksSpring24 |>
+  mutate(Semester = 'Spring 2024') |>
+  select(`Academic Term`, `Academic Department Name`, `Course Code`, `Instructor Name`, `ISBN`, `Short Title`, `Book Author`, `Book Publisher`, `Enrollment Capacity`, `TextbookMatchISBNs.MMS Id`, `Access_Type`, `results.Availability`, `Permalink`, `Section Code`, `Subject Area`, Semester)
+
+colnames(booksSpring24) <- c('Academic Term', 'Academic Department Name', 'Course Code', 'Instructor Name', 'ISBN', 'Short Title', 'Book Author', 'Book Publisher', 'Enrollment Capacity', 'MMS ID', 'Access_Type', 'Electronic Availability', 'Permalink', 'Section Code', 'Subject Area', 'Semester')
+
+booksFall24 <- read_excel('Final Fall 2024 Bookstore List Oct 16.xlsx')
+
+for(i in 1:dim(booksFall24)[1]){
+  booksFall24$`Course Code`[i] <- case_when(
+    nchar(str_split(str_split(booksFall24$`Section Code`[i], '-')[[1]][2], '\\.')[[1]][1]) == 4 ~ substr(booksFall24$`Section Code`[i], 8, 15),
+    nchar(str_split(str_split(booksFall24$`Section Code`[i], '-')[[1]][2], '\\.')[[1]][1]) == 3 ~ substr(booksFall24$`Section Code`[i], 8, 14),
+    nchar(str_split(str_split(booksFall24$`Section Code`[i], '-')[[1]][2], '\\.')[[1]][1]) == 2 ~ substr(booksFall24$`Section Code`[i], 8, 13)
+  )
+  
+  booksFall24$`Subject Area`[i] <- case_when(
+    nchar(str_split(str_split(booksFall24$`Section Code`[i], '-')[[1]][2], '\\.')[[1]][1]) == 4 ~ substr(booksFall24$`Section Code`[i], 8, 11),
+    nchar(str_split(str_split(booksFall24$`Section Code`[i], '-')[[1]][2], '\\.')[[1]][1]) == 3 ~ substr(booksFall24$`Section Code`[i], 8, 10),
+    nchar(str_split(str_split(booksFall24$`Section Code`[i], '-')[[1]][2], '\\.')[[1]][1]) == 2 ~ substr(booksFall24$`Section Code`[i], 8, 9)
+  )
+}
+
+booksFall24 <- booksFall24 |>
+  mutate(Semester = 'Fall 2024') |>
+  select(`Academic Term`, `Academic Department Name`, `Course Code`, `Instructor Name`, `ISBN`, `Short Title`, `Book Author`, `Book Publisher`, `Enrollment Capacity`, `TextbookMatchISBNs.MMS Id`, `Access_Type`, `results.Availability`, `Permalink`, `Section Code`, `Subject Area`, Semester)
+
+colnames(booksFall24) <- c('Academic Term', 'Academic Department Name', 'Course Code', 'Instructor Name', 'ISBN', 'Short Title', 'Book Author', 'Book Publisher', 'Enrollment Capacity', 'MMS ID', 'Access_Type', 'Electronic Availability', 'Permalink', 'Section Code', 'Subject Area', 'Semester')
+
+
+booksSpring25 <- read_excel('Final Spring 2025 Bookstore List Mar 26.xlsx') 
+
+for(i in 1:dim(booksSpring25)[1]){
+  booksSpring25$`Course Code`[i] <- case_when(
+    nchar(str_split(str_split(booksSpring25$`Section Code`[i], '-')[[1]][2], '\\.')[[1]][1]) == 4 ~ substr(booksSpring25$`Section Code`[i], 8, 15),
+    nchar(str_split(str_split(booksSpring25$`Section Code`[i], '-')[[1]][2], '\\.')[[1]][1]) == 3 ~ substr(booksSpring25$`Section Code`[i], 8, 14),
+    nchar(str_split(str_split(booksSpring25$`Section Code`[i], '-')[[1]][2], '\\.')[[1]][1]) == 2 ~ substr(booksSpring25$`Section Code`[i], 8, 13)
+  )
+  
+  booksSpring25$`Subject Area`[i] <- case_when(
+    nchar(str_split(str_split(booksSpring25$`Section Code`[i], '-')[[1]][2], '\\.')[[1]][1]) == 4 ~ substr(booksSpring25$`Section Code`[i], 8, 11),
+    nchar(str_split(str_split(booksSpring25$`Section Code`[i], '-')[[1]][2], '\\.')[[1]][1]) == 3 ~ substr(booksSpring25$`Section Code`[i], 8, 10),
+    nchar(str_split(str_split(booksSpring25$`Section Code`[i], '-')[[1]][2], '\\.')[[1]][1]) == 2 ~ substr(booksSpring25$`Section Code`[i], 8, 9)
+  )
+}
+
+booksSpring25 <- booksSpring25 |>
+  mutate(Semester = 'Spring 2025') |>
+  select(`Academic Term`, `Academic Department Name`, `Course Code`, `Instructor Name`, `ISBN`, `Short Title`, `Book Author`, `Book Publisher`, `Enrollment Capacity`, `MMS ID`, `Access_Type`, `Electronic Availability`, `Permalink`, `Section Code`, `Subject Area`, Semester)
+
+booksFall25 <- read_excel('Final Fall 2025 Bookstore List Sep 10.xlsx')
+
+for(i in 1:dim(booksFall25)[1]){
+  booksFall25$`Course Code`[i] <- case_when(
+    nchar(str_split(str_split(booksFall25$`Section Code`[i], '-')[[1]][2], '\\.')[[1]][1]) == 4 ~ substr(booksFall25$`Section Code`[i], 8, 15),
+    nchar(str_split(str_split(booksFall25$`Section Code`[i], '-')[[1]][2], '\\.')[[1]][1]) == 3 ~ substr(booksFall25$`Section Code`[i], 8, 14),
+    nchar(str_split(str_split(booksFall25$`Section Code`[i], '-')[[1]][2], '\\.')[[1]][1]) == 2 ~ substr(booksFall25$`Section Code`[i], 8, 13)
+  )
+  
+  booksFall25$`Subject Area`[i] <- case_when(
+    nchar(str_split(str_split(booksFall25$`Section Code`[i], '-')[[1]][2], '\\.')[[1]][1]) == 4 ~ substr(booksFall25$`Section Code`[i], 8, 11),
+    nchar(str_split(str_split(booksFall25$`Section Code`[i], '-')[[1]][2], '\\.')[[1]][1]) == 3 ~ substr(booksFall25$`Section Code`[i], 8, 10),
+    nchar(str_split(str_split(booksFall25$`Section Code`[i], '-')[[1]][2], '\\.')[[1]][1]) == 2 ~ substr(booksFall25$`Section Code`[i], 8, 9)
+  )
+}
+
+booksFall25 <- booksFall25 |>
+  mutate(Semester = 'Fall 2025') |>
+  select(`Academic Term`, `Academic Department Name`, `Course Code`, `Instructor Name`, `ISBN`, `Short Title`, `Book Author`, `Book Publisher`, `Enrollment Capacity`, `MMS ID`, `Access_Type`, `Electronic Availability`, `Permalink`, `Section Code`, `Subject Area`, Semester)
+
+
+
+booksSpring26 <- read_excel('Final Spring 2026 Textbook List Jan 14.xlsx') 
+
+for(i in 1:dim(booksSpring26)[1]){
+  booksSpring26$`Course Code`[i] <- case_when(
+    nchar(str_split(str_split(booksSpring26$`Section Code`[i], '-')[[1]][2], '\\.')[[1]][1]) == 4 ~ substr(booksSpring26$`Section Code`[i], 8, 15),
+    nchar(str_split(str_split(booksSpring26$`Section Code`[i], '-')[[1]][2], '\\.')[[1]][1]) == 3 ~ substr(booksSpring26$`Section Code`[i], 8, 14),
+    nchar(str_split(str_split(booksSpring26$`Section Code`[i], '-')[[1]][2], '\\.')[[1]][1]) == 2 ~ substr(booksSpring26$`Section Code`[i], 8, 13)
+  )
+  
+  booksSpring26$`Subject Area`[i] <- case_when(
+    nchar(str_split(str_split(booksSpring26$`Section Code`[i], '-')[[1]][2], '\\.')[[1]][1]) == 4 ~ substr(booksSpring26$`Section Code`[i], 8, 11),
+    nchar(str_split(str_split(booksSpring26$`Section Code`[i], '-')[[1]][2], '\\.')[[1]][1]) == 3 ~ substr(booksSpring26$`Section Code`[i], 8, 10),
+    nchar(str_split(str_split(booksSpring26$`Section Code`[i], '-')[[1]][2], '\\.')[[1]][1]) == 2 ~ substr(booksSpring26$`Section Code`[i], 8, 9)
+  )
+}
+
+booksSpring26 <- booksSpring26 |>
+  mutate(Semester = 'Spring 2026') |>
+  select(`Academic Term`, `Academic Department Name`, `Course Code`, `Instructor Name`, `ISBN`, `Short Title`, `Book Author`, `Book Publisher`, `Enrollment Capacity`, `MMS ID`, `Access_Type`, `Electronic Availability`, `Permalink`, `Section Code`, `Subject Area`, Semester)
+
+
+
+booksSummer26 <- read_excel('Final Summer 2026 Textbook List Jun 9.xlsx') 
+
+for(i in 1:dim(booksSummer26)[1]){
+  booksSummer26$`Course Code`[i] <- case_when(
+    nchar(str_split(str_split(booksSummer26$`Section Code`[i], '-')[[1]][2], '\\.')[[1]][1]) == 4 ~ substr(booksSummer26$`Section Code`[i], 8, 15),
+    nchar(str_split(str_split(booksSummer26$`Section Code`[i], '-')[[1]][2], '\\.')[[1]][1]) == 3 ~ substr(booksSummer26$`Section Code`[i], 8, 14),
+    nchar(str_split(str_split(booksSummer26$`Section Code`[i], '-')[[1]][2], '\\.')[[1]][1]) == 2 ~ substr(booksSummer26$`Section Code`[i], 8, 13)
+  )
+  
+  booksSummer26$`Subject Area`[i] <- case_when(
+    nchar(str_split(str_split(booksSummer26$`Section Code`[i], '-')[[1]][2], '\\.')[[1]][1]) == 4 ~ substr(booksSummer26$`Section Code`[i], 8, 11),
+    nchar(str_split(str_split(booksSummer26$`Section Code`[i], '-')[[1]][2], '\\.')[[1]][1]) == 3 ~ substr(booksSummer26$`Section Code`[i], 8, 10),
+    nchar(str_split(str_split(booksSummer26$`Section Code`[i], '-')[[1]][2], '\\.')[[1]][1]) == 2 ~ substr(booksSummer26$`Section Code`[i], 8, 9)
+  )
+}
+
+booksSummer26 <- booksSummer26 |>
+  mutate(Semester = 'Summer 2026') |>
+  select(`Academic Term`, `Academic Department Name`, `Course Code`, `Instructor Name`, `ISBN`, `Short Title`, `Book Author`, `Book Publisher`, `Enrollment Capacity`, `MMS ID`, `Access_Type`, `Electronic Availability`, `Permalink`, `Section Code`, `Subject Area`, Semester)
+
+
+bookstoreBooks <- rbind(booksSpring24, booksFall24, booksSpring25, booksFall25, booksSpring26, booksSummer26)
+```
+
+
+
+```{r}
+write_xlsx(bookstoreBooks, 'Full Bookstore List.xlsx')
+```
+
+
+
+
+# Request and Fulfillment Data
+
+
+## Load the Textbook Tracking Sheet (for Spring 2024 - Summer 2026 Data)
+
+
+Data for 2024-2025 was confirmed during December 2025. Spring 2026 data is accurate as of January 14, the date the last VolBooks list was sent.
+
+Summer 2026 data will be incorporated later in the summer.
+
+
+FOR EACH NEW SEMESTER, Download the Textbook Tracking Sheet from SharePoint to refresh it with new data, and add the semester to the filter statement below.
+
+
+```{r}
+textbookTrack <- read_excel('Textbook Tracking Sheet June 12.xlsx') |>
+  filter(`Academic Semester` %in% c('Spring 2024', 'Fall 2024', 'Spring 2025', 'Fall 2025', 'Spring 2026', 'Summer 2026'))
+```
+
+
+
+## Load the Final Textbook Lists from VolBooks
+
+Each list lines up with the final dates listed in the Textbook Tracking Sheet. This is the list of all titles VolBooks sends us each semester.
+
+
+FOR EACH SEMESTER, copy a code chunk and rename all variables to match the current semester.
+
+
+```{r, warning = FALSE}
+finalReceivedSpring24 <- read_excel('Final Received Textbook List Spring 2024.xlsx') 
+
+colnames(finalReceivedSpring24) <- c('Academic Term', 'Academic Department Name', 'Section Code', 'Instructor Name', 'ISBN', 'Short Title', 'Book Author', 'Book Publisher', 'Enrollment Capacity')
+
+for(i in 1:dim(finalReceivedSpring24)[1]){
+  finalReceivedSpring24$Course_Name[i] <- str_split(finalReceivedSpring24$`Section Code`[i], '-')[[1]][2]
+  finalReceivedSpring24$Course_Number[i] <- str_split(finalReceivedSpring24$Course_Name[i], '\\.')[[1]][2]
+  finalReceivedSpring24$Course_Code[i] <- substr(str_split(finalReceivedSpring24$`Section Code`[i], '-')[[1]][2], 1, nchar(str_split(finalReceivedSpring24$`Section Code`[i], '-')[[1]][2]) - 4)
+}  
+
+finalReceivedSpring24 <- finalReceivedSpring24 |>
+  mutate(Course_Number = as.numeric(Course_Number),
+         Semester = 'Spring 2024')
+
+
+finalReceivedFall24 <- read_excel('Final Received Textbook List Fall 2024.xlsx')
+
+for(i in 1:dim(finalReceivedFall24)[1]){
+  finalReceivedFall24$Course_Name[i] <- str_split(finalReceivedFall24$`Section Code`[i], '-')[[1]][2]
+  finalReceivedFall24$Course_Number[i] <- str_split(finalReceivedFall24$Course_Name[i], '\\.')[[1]][2]
+  finalReceivedFall24$Course_Code[i] <- substr(str_split(finalReceivedFall24$`Section Code`[i], '-')[[1]][2], 1, nchar(str_split(finalReceivedFall24$`Section Code`[i], '-')[[1]][2]) - 4)
+}  
+
+finalReceivedFall24 <- finalReceivedFall24 |>
+  mutate(Course_Number = as.numeric(Course_Number),
+         Semester = 'Fall 2024')
+
+
+finalReceivedSpring25 <- read_excel('Final Received Textbook List Spring 2025.xlsx')
+
+
+for(i in 1:dim(finalReceivedSpring25)[1]){
+  finalReceivedSpring25$Course_Name[i] <- str_split(finalReceivedSpring25$`Section Code`[i], '-')[[1]][2]
+  finalReceivedSpring25$Course_Number[i] <- str_split(finalReceivedSpring25$Course_Name[i], '\\.')[[1]][2]
+  finalReceivedSpring25$Course_Code[i] <- substr(str_split(finalReceivedSpring25$`Section Code`[i], '-')[[1]][2], 1, nchar(str_split(finalReceivedSpring25$`Section Code`[i], '-')[[1]][2]) - 4)
+}  
+
+finalReceivedSpring25 <- finalReceivedSpring25 |>
+  mutate(Course_Number = as.numeric(Course_Number),
+         Semester = 'Spring 2025')
+
+
+finalReceivedFall25 <- read_excel('Final Received Textbook List Fall 2025.xlsx')
+
+for(i in 1:dim(finalReceivedFall25)[1]){
+  finalReceivedFall25$Course_Name[i] <- str_split(finalReceivedFall25$`Section Code`[i], '-')[[1]][2]
+  finalReceivedFall25$Course_Number[i] <- str_split(finalReceivedFall25$Course_Name[i], '\\.')[[1]][2]
+  finalReceivedFall25$Course_Code[i] <- substr(str_split(finalReceivedFall25$`Section Code`[i], '-')[[1]][2], 1, nchar(str_split(finalReceivedFall25$`Section Code`[i], '-')[[1]][2]) - 4)
+}  
+
+finalReceivedFall25 <- finalReceivedFall25 |>
+  mutate(Course_Number = as.numeric(Course_Number),
+         Semester = 'Fall 2025')
+
+
+finalReceivedSpring26 <- read_excel('Final Received Textbook List Spring 2026.xlsx')
+
+
+for(i in 1:dim(finalReceivedSpring26)[1]){
+  finalReceivedSpring26$Course_Name[i] <- str_split(finalReceivedSpring26$`Section Code`[i], '-')[[1]][2]
+  finalReceivedSpring26$Course_Number[i] <- str_split(finalReceivedSpring26$Course_Name[i], '\\.')[[1]][2]
+  finalReceivedSpring26$Course_Code[i] <- substr(str_split(finalReceivedSpring26$`Section Code`[i], '-')[[1]][2], 1, nchar(str_split(finalReceivedSpring26$`Section Code`[i], '-')[[1]][2]) - 4)
+}  
+
+finalReceivedSpring26 <- finalReceivedSpring26 |>
+  mutate(Course_Number = as.numeric(Course_Number),
+         Semester = 'Spring 2026')
+
+
+finalReceivedSummer26 <- read_excel('Final Received Textbook List Summer 2026.xlsx')
+
+
+for(i in 1:dim(finalReceivedSummer26)[1]){
+  finalReceivedSummer26$Course_Name[i] <- str_split(finalReceivedSummer26$`Section Code`[i], '-')[[1]][2]
+  finalReceivedSummer26$Course_Number[i] <- str_split(finalReceivedSummer26$Course_Name[i], '\\.')[[1]][2]
+  finalReceivedSummer26$Course_Code[i] <- substr(str_split(finalReceivedSummer26$`Section Code`[i], '-')[[1]][2], 1, nchar(str_split(finalReceivedSummer26$`Section Code`[i], '-')[[1]][2]) - 4)
+}  
+
+finalReceivedSummer26 <- finalReceivedSummer26 |>
+  mutate(Course_Number = as.numeric(Course_Number),
+         Semester = 'Summer 2026')
+
+finalReceivedLists <- rbind(finalReceivedSpring24, finalReceivedFall24, finalReceivedSpring25, finalReceivedFall25, finalReceivedSpring26, finalReceivedSummer26) |>
+  mutate(CourseA = ifelse(Course_Number >= 100 & Course_Number <= 299, 1, 0),
+         CourseB = ifelse(Course_Number >= 300 & Course_Number <= 499, 1, 0),
+         CourseC = ifelse(Course_Number >= 500, 1, 0))
+```
+
+
+
+
+# Connect the Received Lists to the Sent Lists
+
+This will allow us to get the metrics for both fulfillment and requests in the same table.
+
+```{r}
+bookstoreSmall <- bookstoreBooks |>
+  mutate(Fulfilled = 1) |>
+  select(ISBN, Semester, Fulfilled, `Section Code`)
+
+allVolBooks <- left_join(finalReceivedLists, bookstoreSmall, by = c('ISBN', 'Semester', 'Section Code')) |>
+  mutate(Fulfilled = ifelse(is.na(Fulfilled) == FALSE, 1, 0))
+
+allVolBooks
+```
+
+
+
+
+
+## Get Course Details from Banner
+
+This tells us whether the course was a class, lab, lecture, etc. and where the class took place (in person, online synchronous or asynchronous, etc.).
+
+FOR EACH SEMESTER, download the HTML course information from Banner. Copy a code chunk and add it to this section.
+
+
+```{r, warning = FALSE}
+# Spring 2024
+bannerSpring2024 <- read_html('Class Schedule Listing Spring 2024.html') %>%
+  html_nodes('body')
+
+bannerTableSpring2024 <- html_table(bannerSpring2024[[1]], fill = TRUE)
+
+sectionName = c()
+sectionType = c()
+sectionTime = c()
+sectionDates = c()
+sectionWhere = c()
+sectionInstructors = c()
+
+for(i in 1:dim(bannerTableSpring2024[1])){
+  if(str_detect(bannerTableSpring2024$X1[i], ' - \\d\\d\\d\\d\\d - ') == TRUE){ #Section Code Info
+    sectionName <- append(sectionName, bannerTableSpring2024$X1[i])
+  }
+  if(bannerTableSpring2024$X1[i] == 'Type'){ #Identifies the start of Section Details
+    sectionType <- append(sectionType, bannerTableSpring2024$X1[i + 1])
+    sectionTime <- append(sectionTime, bannerTableSpring2024$X2[i + 1])
+    sectionDates <- append(sectionDates, bannerTableSpring2024$X5[i + 1])
+    sectionWhere <- append(sectionWhere, bannerTableSpring2024$X4[i + 1])
+    sectionInstructors <- append(sectionInstructors, bannerTableSpring2024$X7[i + 1])
+  }
+}
+
+courseInfoSpring2024 <- data.frame(cbind(sectionName, sectionType, sectionTime, sectionDates, sectionWhere, sectionInstructors)) |>
+  mutate(Semester = 'Spring 2024')
+
+# Fall 2024
+bannerFall2024 <- read_html('Class Schedule Listing Fall 2024.html') %>%
+  html_nodes('body')
+
+bannerTableFall2024 <- html_table(bannerFall2024[[1]], fill = TRUE)
+
+sectionName = c()
+sectionType = c()
+sectionTime = c()
+sectionDates = c()
+sectionWhere = c()
+sectionInstructors = c()
+
+for(i in 1:dim(bannerTableFall2024[1])){
+  if(str_detect(bannerTableFall2024$X1[i], ' - \\d\\d\\d\\d\\d - ') == TRUE){ #Section Code Info
+    sectionName <- append(sectionName, bannerTableFall2024$X1[i])
+  }
+  if(bannerTableFall2024$X1[i] == 'Type'){ #Identifies the start of Section Details
+    sectionType <- append(sectionType, bannerTableFall2024$X1[i + 1])
+    sectionTime <- append(sectionTime, bannerTableFall2024$X2[i + 1])
+    sectionDates <- append(sectionDates, bannerTableFall2024$X5[i + 1])
+    sectionWhere <- append(sectionWhere, bannerTableFall2024$X4[i + 1])
+    sectionInstructors <- append(sectionInstructors, bannerTableFall2024$X7[i + 1])
+  }
+}
+
+courseInfoFall2024 <- data.frame(cbind(sectionName, sectionType, sectionTime, sectionDates, sectionWhere, sectionInstructors)) |>
+  mutate(Semester = 'Fall 2024') 
+
+
+# Spring 2025
+bannerSpring2025 <- read_html('Class Schedule Listing Spring 2025.html') %>%
+  html_nodes('body')
+
+bannerTableSpring2025 <- html_table(bannerSpring2025[[1]], fill = TRUE)
+
+sectionName = c()
+sectionType = c()
+sectionTime = c()
+sectionDates = c()
+sectionWhere = c()
+sectionInstructors = c()
+
+for(i in 1:dim(bannerTableSpring2025[1])){
+  if(str_detect(bannerTableSpring2025$X1[i], ' - \\d\\d\\d\\d\\d - ') == TRUE){ #Section Code Info
+    sectionName <- append(sectionName, bannerTableSpring2025$X1[i])
+  }
+  if(bannerTableSpring2025$X1[i] == 'Type'){ #Identifies the start of Section Details
+    sectionType <- append(sectionType, bannerTableSpring2025$X1[i + 1])
+    sectionTime <- append(sectionTime, bannerTableSpring2025$X2[i + 1])
+    sectionDates <- append(sectionDates, bannerTableSpring2025$X5[i + 1])
+    sectionWhere <- append(sectionWhere, bannerTableSpring2025$X4[i + 1])
+    sectionInstructors <- append(sectionInstructors, bannerTableSpring2025$X7[i + 1])
+  }
+}
+
+courseInfoSpring2025 <- data.frame(cbind(sectionName, sectionType, sectionTime, sectionDates, sectionWhere, sectionInstructors)) |>
+  mutate(Semester = 'Spring 2025')
+
+
+# Fall 2025
+bannerFall2025 <- read_html('Class Schedule Listing Fall 2025.html') %>%
+  html_nodes('body')
+
+bannerTableFall2025 <- html_table(bannerFall2025[[1]], fill = TRUE)
+
+sectionName = c()
+sectionType = c()
+sectionTime = c()
+sectionDates = c()
+sectionWhere = c()
+sectionInstructors = c()
+
+for(i in 1:dim(bannerTableFall2025[1])){
+  if(str_detect(bannerTableFall2025$X1[i], ' - \\d\\d\\d\\d\\d - ') == TRUE){ #Section Code Info
+    sectionName <- append(sectionName, bannerTableFall2025$X1[i])
+  }
+  if(bannerTableFall2025$X1[i] == 'Type'){ #Identifies the start of Section Details
+    sectionType <- append(sectionType, bannerTableFall2025$X1[i + 1])
+    sectionTime <- append(sectionTime, bannerTableFall2025$X2[i + 1])
+    sectionDates <- append(sectionDates, bannerTableFall2025$X5[i + 1])
+    sectionWhere <- append(sectionWhere, bannerTableFall2025$X4[i + 1])
+    sectionInstructors <- append(sectionInstructors, bannerTableFall2025$X7[i + 1])
+  }
+}
+
+courseInfoFall2025 <- data.frame(cbind(sectionName, sectionType, sectionTime, sectionDates, sectionWhere, sectionInstructors)) |>
+  mutate(Semester = 'Fall 2025') 
+
+
+# Spring 2026
+bannerSpring2026 <- read_html('Class Schedule Listing Spring 2026.html') %>%
+  html_nodes('body')
+
+bannerTableSpring2026 <- html_table(bannerSpring2026[[1]], fill = TRUE)
+
+sectionName = c()
+sectionType = c()
+sectionTime = c()
+sectionDates = c()
+sectionWhere = c()
+sectionInstructors = c()
+
+for(i in 1:dim(bannerTableSpring2026[1])){
+  if(str_detect(bannerTableSpring2026$X1[i], ' - \\d\\d\\d\\d\\d - ') == TRUE){ #Section Code Info
+    sectionName <- append(sectionName, bannerTableSpring2026$X1[i])
+  }
+  if(bannerTableSpring2026$X1[i] == 'Type'){ #Identifies the start of Section Details
+    sectionType <- append(sectionType, bannerTableSpring2026$X1[i + 1])
+    sectionTime <- append(sectionTime, bannerTableSpring2026$X2[i + 1])
+    sectionDates <- append(sectionDates, bannerTableSpring2026$X5[i + 1])
+    sectionWhere <- append(sectionWhere, bannerTableSpring2026$X4[i + 1])
+    sectionInstructors <- append(sectionInstructors, bannerTableSpring2026$X7[i + 1])
+  }
+}
+
+courseInfoSpring2026 <- data.frame(cbind(sectionName, sectionType, sectionTime, sectionDates, sectionWhere, sectionInstructors)) |>
+  mutate(Semester = 'Spring 2026') 
+
+
+
+
+# Summer Mini 2026
+bannerSummerMini2026 <- read_html('Class Schedule Listing Summer Mini 2026.html') %>%
+  html_nodes('body')
+
+bannerTableSummerMini2026 <- html_table(bannerSummerMini2026[[1]], fill = TRUE)
+
+sectionName = c()
+sectionType = c()
+sectionTime = c()
+sectionDates = c()
+sectionWhere = c()
+sectionInstructors = c()
+
+for(i in 1:dim(bannerTableSummerMini2026[1])){
+  if(str_detect(bannerTableSummerMini2026$X1[i], ' - \\d\\d\\d\\d\\d - ') == TRUE){ #Section Code Info
+    sectionName <- append(sectionName, bannerTableSummerMini2026$X1[i])
+  }
+  if(bannerTableSummerMini2026$X1[i] == 'Type'){ #Identifies the start of Section Details
+    sectionType <- append(sectionType, bannerTableSummerMini2026$X1[i + 1])
+    sectionTime <- append(sectionTime, bannerTableSummerMini2026$X2[i + 1])
+    sectionDates <- append(sectionDates, bannerTableSummerMini2026$X5[i + 1])
+    sectionWhere <- append(sectionWhere, bannerTableSummerMini2026$X4[i + 1])
+    sectionInstructors <- append(sectionInstructors, bannerTableSummerMini2026$X7[i + 1])
+  }
+}
+
+courseInfoSummerMini2026 <- data.frame(cbind(sectionName, sectionType, sectionTime, sectionDates, sectionWhere, sectionInstructors)) |>
+  mutate(Semester = 'Summer Mini 2026') 
+
+
+
+
+# Summer Full 2026
+bannerSummerFull2026 <- read_html('Class Schedule Listing Summer Full 2026.html') %>%
+  html_nodes('body')
+
+bannerTableSummerFull2026 <- html_table(bannerSummerFull2026[[1]], fill = TRUE)
+
+sectionName = c()
+sectionType = c()
+sectionTime = c()
+sectionDates = c()
+sectionWhere = c()
+sectionInstructors = c()
+
+for(i in 1:dim(bannerTableSummerFull2026[1])){
+  if(str_detect(bannerTableSummerFull2026$X1[i], ' - \\d\\d\\d\\d\\d - ') == TRUE){ #Section Code Info
+    sectionName <- append(sectionName, bannerTableSummerFull2026$X1[i])
+  }
+  if(bannerTableSummerFull2026$X1[i] == 'Type'){ #Identifies the start of Section Details
+    sectionType <- append(sectionType, bannerTableSummerFull2026$X1[i + 1])
+    sectionTime <- append(sectionTime, bannerTableSummerFull2026$X2[i + 1])
+    sectionDates <- append(sectionDates, bannerTableSummerFull2026$X5[i + 1])
+    sectionWhere <- append(sectionWhere, bannerTableSummerFull2026$X4[i + 1])
+    sectionInstructors <- append(sectionInstructors, bannerTableSummerFull2026$X7[i + 1])
+  }
+}
+
+courseInfoSummerFull2026 <- data.frame(cbind(sectionName, sectionType, sectionTime, sectionDates, sectionWhere, sectionInstructors)) |>
+  mutate(Semester = 'Summer Full 2026') 
+
+
+courseInfo <- rbind(courseInfoSpring2024, courseInfoFall2024, courseInfoSpring2025, courseInfoFall2025, courseInfoSpring2026, courseInfoSummerMini2026, courseInfoSummerFull2026)
+
+courseInfo
+```
+
+
+
+
+## Join Banner Details to the VolBooks Details
+
+The section code will need to be created from the section name for proper matching.
+
+
+```{r}
+sectionInfo <- courseInfo 
+
+for(i in 1:dim(sectionInfo)[1]){
+    sectionInfo$sectionCode[i] <- str_trim(paste(
+    substr(sectionInfo$Semester[i], nchar(sectionInfo$Semester[i]) - 4, nchar(sectionInfo$Semester[i])),
+    case_when(
+      grepl('Spring', sectionInfo$Semester[i]) == TRUE ~ 20,
+      grepl('Summer', sectionInfo$Semester[i]) == TRUE ~ 30,
+      grepl('Fall', sectionInfo$Semester[i]) == TRUE ~ 40
+    ),
+    '-',
+    str_split(str_split(sectionInfo$sectionName[i], '- ')[[1]][3], ' ')[[1]][1],
+    '.',
+    str_split(str_split(sectionInfo$sectionName[i], '- ')[[1]][3], ' ')[[1]][2],
+    '.',
+    str_split(sectionInfo$sectionName[i], '- ')[[1]][4],
+    '-',
+    str_trim(str_split(sectionInfo$sectionName[i], '- ')[[1]][2])
+  , sep = ''))
+}
+
+sectionInfo
+```
+
+
+
+
+```{r}
+requestAndFill <- left_join(allVolBooks, sectionInfo, by = c('Section Code' = 'sectionCode', 'Semester' = 'Semester')) |>
+  mutate(Format = case_when(
+    is.na(sectionWhere) == TRUE ~ 'Unknown',
+    grepl('ONLINE', sectionWhere, ignore.case = TRUE) == TRUE ~ 'Online',
+    grepl('ONLINE', sectionWhere, ignore.case = TRUE) == FALSE ~ 'In Person'
+  ),
+        sectionType = ifelse(is.na(sectionType) == TRUE, 'Unknown', sectionType),
+        SortOrder = case_when(
+          Semester == 'Spring 2024' ~ 1,
+          Semester == 'Fall 2024' ~ 2,
+          Semester == 'Spring 2025' ~ 3,
+          Semester == 'Fall 2025' ~ 4,
+          Semester == 'Spring 2026' ~ 5,
+          Semester == 'Summer 2026' ~ 6
+        ))
+
+requestAndFill
+```
+
+
+
+```{r}
+write_xlsx(requestAndFill, 'Full Course Information.xlsx')
+```
+
+
+## Calculate Metrics
+
+
+### Directly from Textbook Tracking Sheet
+
+The Alma-Based Metrics will be taken from the Textbook Tracking Sheet directly for every semester up to Summer 2026.
+
+```{r}
+ttsMetrics <- textbookTrack |>
+  select(`Academic Semester`, `Total Titles Found in Rialto`, `Previously Owned`, `Purchased that Semester`, `Total Titles Owned`, `Total Cost`)
+
+colnames(ttsMetrics) <- c('Semester', 'Total Titles', 'Previously Owned', 'Purchased That Semester', 'Total Owned', 'Total Cost')
+
+ttsMetrics
+```
+
+
+
+### Based on VolBooks-Sent Lists Only
+
+These metrics come from aggregating information from the list of titles sent from VolBooks only. The combined file including requests and fulfilled data will be used for consistency.
+
+
+```{r}
+volListMetrics <- requestAndFill |>
+  group_by(Semester) |>
+  summarise(TotalTitlesRequested = length(unique(`Short Title`)),
+            DepartmentsParticipating = length(unique(`Academic Department Name`)),
+            UniqueCourses = length(unique(paste(`Academic Department Name`, Course_Number)))
+            )
+
+volListMetrics
+```
+
+
+
+### Based on Unique Department or Course Information
+
+
+This section uses both the VolBooks sent and received lists, but breaks down information by unique department or course to get those figures.
+
+
+
+```{r}
+departmentBreakdown <- requestAndFill |>
+  group_by(Semester, `Academic Department Name`) |>
+  summarise(TotalDepartmentRequests = length(unique(`Short Title`)),
+            TotalDepartmentCourses = length(unique(paste(`Academic Department Name`, Course_Number))))
+
+departmentBreakdown
+```
+
+
+
+## Information For Each Course
+
+This will be for the course count metrics, using the same requestAndFill data.
+
+
+```{r}
+courseBreakdown <- requestAndFill |>
+  mutate(CourseClean = paste(`Academic Department Name`, `Course_Number`)) |>
+  group_by(Semester, CourseClean) |>
+  summarise(Sections = length(unique(Course_Name)),
+            TitlesRequested = length(unique(`Short Title`)),
+            Is100 = max(CourseA),
+            Is300 = max(CourseB),
+            Is500 = max(CourseC),
+            HasBookFulfilled = max(Fulfilled)
+  )
+            
+
+courseBreakdown
+```
+
+
+
+```{r}
+semesterByCourse <- courseBreakdown |>
+  group_by(Semester) |>
+  summarise(FulfilledCourses = sum(HasBookFulfilled),
+            Courses100 = sum(Is100),
+            Courses100Fulfilled = sum(ifelse(Is100 + HasBookFulfilled == 2, 1, 0)),
+            Courses300 = sum(Is300),
+            Courses300Fulfilled = sum(ifelse(Is300 + HasBookFulfilled == 2, 1, 0)),
+            Courses500 = sum(Is500),
+            Courses500Fulfilled = sum(ifelse(Is500 + HasBookFulfilled == 2, 1, 0)))
+
+semesterByCourse
+```
+
+
+
+### Join All Semester-Wide Metrics Together and Add Percentages
+
+All of the above created metrics for each semester will be joined by semester. The department metrics will remain separate within the final report.
+
+
+```{r}
+joinA <- inner_join(ttsMetrics, volListMetrics, by = 'Semester')
+joinB <- inner_join(joinA, semesterByCourse, by = 'Semester')  |>
+  mutate(PercentTitlesOwned = round(100.0*(`Total Owned` / TotalTitlesRequested), 1))
+
+```
+
+## Export the Department and Course Tracking Files
+
+
+The Semester will be exported later in the code, after usage is added.
+
+```{r}
+write_xlsx(departmentBreakdown, 'VolBooks Textbook Tracking by Department.xlsx')
+write_xlsx(courseBreakdown, 'VolBooks Textbook Tracking by Course.xlsx')
+```
+
+
+Both of these files will go to the PowerBI report.
+
+
+
+# Usage Gathering
+
+
+
+## Clean up the Full Bookstore List
+
+
+```{r}
+bookstoreCourses <- bookstoreBooks |>
+  select(`Subject Area`, Semester) |>
+  distinct()
+
+bookstoreCourses
+
+
+bookstoreList <- bookstoreBooks |>
+  select(ISBN, `Short Title`, `Book Author`, `Book Publisher`, `MMS ID`, `Electronic Availability`, Semester) |>
+  distinct() |>
+  mutate(`MMS ID` = as.character(`MMS ID`)) |>
+  mutate(`MMS ID` = paste(substr(`MMS ID`, 1, 15), '1', sep = '')) 
+
+bookstoreList
+```
+
+
+
+
+## Insert Clean Titles for Title Matching
+
+
+FOR EACH SEMESTER, check the names of the new books sent to VolBooks in the usage database, PowerBI dashboard, or other usage methods. Make sure each title name is edited to MATCH THE USAGE NAME FOR THE TITLE by adding additional lines to the function below.
+
+```{r}
+bookstoreListShort <- bookstoreList |>
+  mutate(UsageTitle = case_when(
+    #Usage Found Titles Go in This Block
+    
+    `Short Title` == '58-IN-MIND : MULTILINGUAL TEACHING STRATEGIES FOR DIVERSE DEAF STUDENTS' ~ '58-IN-MIND',
+    `Short Title` == 'A DOCUMENTARY HISTORY OF RELIGION IN AMERICA' ~ 'A Documentary History of Religion in America',
+    `Short Title` == 'A FIELD GUIDE TO GRAD SCHOOL' ~ 'A Field Guide to Grad School',
+    `Short Title` == 'A HOUSE FOR MR. BISWAS' ~ 'A House for Mr. Biswas',
+    `Short Title` == 'A SHORT COURSE IN READING FRENCH' ~ 'A Short Course in Reading French',
+    `Short Title` == 'A TALE OF TWO CULTURES : QUALITATIVE AND QUANTITATIVE RESEARCH IN THE SOCIAL SCIENCES' ~ 'A Tale of Two Cultures',
+    `Short Title` == "A WRITER'S DIARY : THE VIRGINIA WOOLF LIBRARY AUTHORIZED EDITION" ~ "A Writer's Diary",
+    `Short Title` == 'ACADEMY OF NUTRITION AND DIETETICS POCKET GUIDE TO NUTRITION ASSESSMENT' ~ 'Academy of Nutrition & Dietetics Pocket Guide to Nutrition Assessment',
+    `Short Title` == 'ACT MADE SIMPLE : AN EASY-TO-READ PRIMER ON ACCEPTANCE AND COMMITMENT THERAPY' ~ 'ACT Made Simple',
+    `Short Title` == 'AFFRILACHIA (OLD COVE PRESS)' ~ 'Affrilachia: Poems',
+    `Short Title` == 'AFRICAN SLAVERY IN LATIN AMERICA & THE CARIBBEAN' ~ 'African Slavery in Latin America and the Caribbean',
+    `Short Title` == 'AFTER VICTORY : INSTITUTIONS, STRATEGIC RESTRAINT, AND THE REBUILDING OF ORDER AFTER MAJOR WARS' ~ 'After Victory',
+    `Short Title` == "ALL THAT SHE CARRIED : THE JOURNEY OF ASHLEY'S SACK, A BLACK FAMILY KEEPSAKE" ~ 'All That She Carried',
+    `Short Title` == 'AMERICA AND THE GREAT WAR : 1914 - 1920' ~ 'America and the Great War',
+    `Short Title` == 'AMERICAN MILITARY LIFE IN THE 21ST CENTURY : SOCIAL, CULTURAL, AND ECONOMIC ISSUES AND TRENDS [2 VOLUMES]' ~ 'American Military Life in the 21st Century: Social, Cultural, and Economic Issues and Trends [2 Volumes]',
+    `Short Title` == 'AN INTRO TO SCIENTIFIC COMPUTING (FREE DIGITAL ACCESS UTK LIBRARY)' ~ 'An Introduction to Scientific Computing',
+    `Short Title` == 'AN UNKINDNESS OF GHOSTS' ~ 'An Unkindness of Ghosts',
+    `Short Title` == 'AN UNSEEN LIGHT : BLACK STRUGGLES FOR FREEDOM IN MEMPHIS, TENNESSEE' ~ 'An Unseen Light',
+    `Short Title` == 'ANGER : THE CONFLICTED HISTORY OF AN EMOTION' ~ 'Anger',
+    `Short Title` == 'APPEALS IN MODERN RHETORIC' ~ 'Appeals in Modern Rhetoric',
+    `Short Title` == 'APPLIED ARTIFICIAL INTELLIGENCE IN BUSINESS : CONCEPTS AND CASES' ~ 'Applied Artificial Intelligence in Business',
+    `Short Title` == 'ARRESTED JUSTICE W/LIFETIME ACCESS' ~ 'Arrested Justice',
+    `Short Title` == 'ARRESTED JUSTICE W/LIFETIME ACCESS (FREE DIGITAL ACCESS- UTK LIBRARY)' ~ 'Arrested Justice',
+    `Short Title` == 'ASSESSMENT IN COUNSELING : PROCEDURES AND PRACTICES' ~ 'Assessment in Counseling: Procedures and Practices',
+    `Short Title` == 'ASSESSMENT IN STUDENT AFFAIRS' ~ 'Assessment in Student Affairs',
+    `Short Title` == 'BANANAS' ~ 'Bananas',
+    `Short Title` == 'BANKING ON FREEDOM' ~ 'Banking on Freedom',
+    `Short Title` == 'BESTIARY : BEING AN ENGLISH VERSION OF THE BODLEIAN LIBRARY, OXFORD, MS BODLEY 764' ~ 'Bestiary: Being an English Version of the Bodleian Library, Oxford M.S. Bodley 764 : With All the Original Miniatures Reproduced in Facsimile',
+    `Short Title` == 'BIOETHICS : WHAT EVERYONE NEEDS TO KNOW?' ~ 'Bioethics: What Everyone Needs to Know',
+    `Short Title` == 'BIOMATERIALS SCIENCE : AN INTRODUCTION TO MATERIALS IN MEDICINE' ~ 'Biomaterials Science',
+    `Short Title` == 'BIOMECHANICS OF MOVEMENT : THE SCIENCE OF SPORTS, ROBOTICS, AND REHABILITATION' ~ 'Biomechanics of Movement',
+    `Short Title` == 'BOATS OF THE WORLD : FROM THE STONE AGE TO MEDIEVAL TIMES' ~ 'Boats of the World',
+    `Short Title` == 'BRAIDING SWEETGRASS : INDIGENOUS WISDOM, SCIENTIFIC KNOWLEDGE AND THE TEACHINGS OF PLANTS' ~ 'Braiding Sweetgrass',
+    `Short Title` == 'BUDGETS & FINANCIAL MGT IN HIGHER ED' ~ 'Budgets and Financial Management in Higher Education',
+    `Short Title` == 'BUILDING SMALL : A TOOLKIT FOR REAL ESTATE ENTREPRENEURS, CIVIC LEADERS, AND GREAT COMMUNITIES' ~ 'Building Small',
+    `Short Title` == 'CASE STUDIES IN DEAF EDUCATION : INQUIRY, APPLICATION, AND RESOURCES' ~ 'Case Studies in Deaf Education',
+    `Short Title` == 'CATALOG OF UNABASHED GRATITUDE' ~ 'Catalog of Unabashed Gratitude',
+    `Short Title` == 'CEREMONY' ~ 'Ceremony',
+    `Short Title` == 'CHASTE PASSIONS : MEDIEVAL ENGLISH VIRGIN MARTYR LEGENDS' ~ 'Chaste Passions',
+    `Short Title` == 'CHIEF SUSTAINABILITY OFFICERS AT WORK' ~ 'Chief Sustainability Officers At Work',
+    `Short Title` == 'CHIEF SUSTAINABILITY OFFICERS AT WORK (FREE DIGITAL- UTK LIBRARY)' ~ 'Chief Sustainability Officers At Work',
+    `Short Title` == 'CHIEF SUSTAINABILITY OFFICERS AT WORK : HOW CSOS BUILD BUSINESS GROWTH THROUGH SUSTAINABLE STRATEGIES' ~ 'Chief Sustainability Officers At Work',
+    `Short Title` == 'CHILD-CENTERED PLAY THERAPY' ~ 'Child-Centered Play Therapy',
+    `Short Title` == 'CLASSICAL NUMERICAL ANALYSIS' ~ 'Classical Numerical Analysis',
+    `Short Title` == 'COLLECTED BODY' ~ 'Collected Body',
+    `Short Title` == 'COMPUTER SECURITY AND THE INTERNET' ~ 'Computer Security and the Internet',
+    `Short Title` == 'CONCISE GUIDE TO CHILD AND ADOLESCENT PSYCHIATRY' ~ 'Concise Guide to Child and Adolescent Psychiatry',
+    `Short Title` == 'CONDENSED MATTER PHYSICS' ~ 'Condensed Matter Physics, Second Edition',
+    `Short Title` == 'CONFLICT RESOLUTION FOR THE HELPING PROFESSIONSUSTICE' ~ 'Conflict Resolution for the Helping Professions',
+    `Short Title` == 'CONSERVATION BIOLOGY : FOUNDATIONS, CONCEPTS, APPLICATIONS' ~ 'Conservation Biology',
+    `Short Title` == 'CONTROVERSIES IN CONTEMPORARY ADVERTISING' ~ 'Controversies in Contemporary Advertising',
+    `Short Title` == 'COPAGANDA : HOW POLICE AND THE MEDIA MANIPULATE OUR NEWS' ~ 'Copaganda',
+    `Short Title` == 'CORE COMPETENCIES IN COGNITIVE-BEHAVIORAL THERAPY' ~ 'Core Competencies in Cognitive-Behavioral Therapy',
+    `Short Title` == 'CORE VALUES IN SCHOOL LIBRARIANSHIP: RESPONDING WITH COMMITMENT AND COURAGE' ~ 'Core Values in School Librarianship',
+    `Short Title` == 'COURSE IN MATHEMATICAL MODELING' ~ 'A Course in Mathematical Modeling',
+    `Short Title` == 'CRACK : ROCK COCAINE, STREET CAPITALISM, AND THE DECADE OF GREED' ~ 'Crack',
+    `Short Title` == 'CRACKED NOT BROKEN' ~ 'Cracked, Not Broken',
+    `Short Title` == 'CRAFTING THE PERSONAL ESSAY : A GUIDE FOR WRITING AND PUBLISHING CREATIVE NON-FICTION' ~ 'Crafting The Personal Essay',
+    `Short Title` == 'CURVES AND SURFACES : SECOND EDITION' ~ 'Curves and Surfaces',
+    `Short Title` == 'DEAF CULTURE : EXPLORING DEAF COMMUNITIES IN THE UNITED STATES' ~ 'Deaf Culture',
+    `Short Title` == 'DEAF PEOPLE AND SOCIETY : PSYCHOLOGICAL, SOCIOLOGICAL, AND EDUCATIONAL PERSPECTIVES' ~ 'Deaf People and Society',
+    `Short Title` == 'DEBATING REFORM : CONFLICTING PERSPECTIVES ON HOW TO FIX THE AMERICAN POLITICAL SYSTEM' ~ 'Debating Reform : Conflicting Perspectives on How to Fix the American Political System',
+    `Short Title` == 'DEBATING REFORM: CONFLICTING PERSPECTIVES' ~ 'Debating Reform : Conflicting Perspectives on How to Fix the American Political System',
+    `Short Title` == 'DEFI AND THE FUTURE OF FINANCE' ~ 'DeFi and the Future of Finance',
+    `Short Title` == 'DEMAND AND SUPPLY INTEGRATION : THE KEY TO WORLD-CLASS DEMAND FORECASTING, SECOND EDITION' ~ 'Demand and Supply Integration',
+    `Short Title` == 'DESIGN STRATEGY : CHALLENGES IN WICKED PROBLEM TERRITORY' ~ 'Design Strategy',
+    `Short Title` == 'DESIGNS FOR LIVING AND LEARNING, SECOND EDITION : TRANSFORMING EARLY CHILDHOOD ENVIRONMENTS' ~ 'Designs for Living and Learning, Second Edition',
+    `Short Title` == 'DIFFERENTIAL EQUATIONS, DYNAMICAL SYSTEMS, AND AN INTRODUCTION TO CHAOS' ~ 'Differential Equations, Dynamical Systems, and an Introduction to Chaos (Third Edition)',
+    `Short Title` == 'DIFFERENTIAL GEOMETRY : CURVES - SURFACES - MANIFOLDS' ~ 'Differential Geometry: Manifolds, Curves, and Surfaces',
+    `Short Title` == 'DIRECTING : FILM TECHNIQUES AND AESTHETICS' ~ 'Directing',
+    `Short Title` == 'DUST BOWLS OF EMPIRE : IMPERIALISM, ENVIRONMENTAL POLITICS,' ~ 'Dust Bowls of Empire',
+    `Short Title` == 'ECONOMETRIC ANALY OF CROSS SECT & P' ~ 'Econometric Analysis of Cross Section and Panel Data, Second Edition',
+    `Short Title` == 'ELEMENTS OF ENVIRONMENTAL CHEMISTRY' ~ 'Elements of Environmental Chemistry, Second Edition',
+    `Short Title` == 'EMPIRE OF RELIGION' ~ 'Empire of Religion: Imperialism and Comparative Religion',
+    `Short Title` == 'ENGAGED ANTHROPOLOGY : POLITICS BEYOND THE TEXT' ~ 'Engaged Anthropology',
+    `Short Title` == 'ENVIROMEDICS : THE IMPACT OF CLIMATE CHANGE ON HUMAN HEALTH' ~ 'Enviromedics',
+    `Short Title` == 'ESSENTIALS OF ASSESSMENT REPORT WRITING' ~ 'Essentials of Assessment Report Writing',
+    `Short Title` == 'ESSENTIALS OF FOOD SCIENCE' ~ 'Essentials of Food Science',
+    `Short Title` == 'ETHICS FOR BEHAVIOR ANALYSTS' ~ 'Ethics for Behavior Analysts',
+    `Short Title` == 'EUCLIDEAN GEOMETRY : A GUIDED INQUIRY APPROACH' ~ 'Euclidean Geometry',
+    `Short Title` == 'EVALUATION AND MEASUREMENT OF LIBRARY SERVICES' ~ 'The Evaluation and Measurement of Library Services',
+    `Short Title` == 'EVELINA' ~ "Evelina: Or the History of A Young Lady's Entrance into the World",
+    `Short Title` == 'EXACTLY HOW TO SELL : THE SALES GUIDE FOR NON-SALES PROFESSIONALS' ~ 'Exactly How to Sell',
+    `Short Title` == 'EXPERT APPROACHES TO SPORT PSYCHOLOGY: APPLIED THEORIES OF PERFORMANCE EXCELLENCE' ~ 'Expert Approaches to Sport Psychology: Applied Theories of Performance Excellence',
+    `Short Title` == 'EYES BOTTLE DARK WITH A MOUTHFUL OF FLOWERS : POEMS' ~ 'Eyes Bottle Dark with a Mouthful of Flowers: Poems',
+    `Short Title` == 'FATAL INVENTION : HOW SCIENCE, POLITICS, AND BIG BUSINESS RE-CREATE RACE IN THE TWENTY-FIRST CENTURY' ~ 'Fatal Invention',
+    `Short Title` == 'FIGHTING AGAINST INJUSTICE OF STATE' ~ 'Fighting Against the Injustice of the State and Globalization',
+    `Short Title` == 'FINANCE FOR REAL ESTATE DEVELOPMENT' ~ 'Finance for Real Estate Development',
+    `Short Title` == 'FINANCIAL LITERACY FOR MANAGERS : FINANCE AND ACCOUNTING FOR BETTER DECISION-MAKING' ~ 'Financial Literacy for Managers',
+    `Short Title` == 'FINANCIAL STATEMENTS' ~ 'Financial Statements',
+    `Short Title` == 'FISHING THROUGH THE APOCALYPSE' ~ 'Fishing Through the Apocalypse',
+    `Short Title` == 'FOREST MANAGEMENT AND PLANNING' ~ 'Forest Management and Planning',
+    `Short Title` == 'FROM THE TRICONTINENTAL TO THE GLOBAL SOUTH : RACE, RADICALISM, AND TRANSNATIONAL SOLIDARITY' ~ 'From the Tricontinental to the Global South',
+    `Short Title` == 'GENDER AND THE MUSICAL CANON' ~ 'Gender and the Musical Canon',
+    `Short Title` == 'GENKI II' ~ 'GENKI: An Integrated Course in Elementary Japanese Ⅱ　SECOND EDITION 初級日本語 げんきⅡ 第2版',
+    `Short Title` == 'GENKI II WORKBOOK' ~ 'GENKI: An Integrated Course in Elementary Japanese Ⅱ WORKBOOK　SECOND EDITION 初級日本語 げんきⅡ ワークブック　第2版',
+    `Short Title` == 'GENKI: AN INTEGRATED COURSE IN ELEMENTARY JAPANESE 1 [3RD EDITION] WORKBOOK' ~ 'GENKI: An Integrated Course in Elementary Japanese Ⅰ　WORKBOOK THIRD EDITION 初級日本語 げんきⅠ ワークブック　 第3版',
+    `Short Title` == 'GEOMETRIC GROUP THEORY : AN INTRODUCTION' ~ 'Geometric Group Theory',
+    `Short Title` == 'GETTING REAL ABOUT INEQUALITY : INTERSECTIONALITY IN REAL LIFE' ~ 'Getting Real About Inequality: Intersectionality in Real Life',
+    `Short Title` == 'GLOBAL HEALTH LAW AND POLICY : ENSURING JUSTICE FOR A HEALTHIER WORLD' ~ 'Global Health Law and Policy',
+    `Short Title` == 'GLOBAL WRITING FOR PUBLIC RELATIONS : CONNECTING IN ENGLISH WITH STAKEHOLDERS AND PUBLICS WORLDWIDE' ~ 'Global Writing for Public Relations',
+    `Short Title` == 'GLOBALIZATION OF EDUCATION' ~ 'Globalization of Education',
+    `Short Title` == 'GOVERNMENT AND POLITICS IN TENNESSEE' ~ 'Government and Politics in Tennessee',
+    `Short Title` == 'GUIDE TO THE VASCULAR PLANTS OF TENNESSEE' ~ 'Guide to the Vascular Plants of Tennessee',
+    `Short Title` == 'HABLAR ESPANOL EN ESTADOS UNIDOS : LA SOCIOPOLITICA DEL LENGUAJE' ~ 'Hablar español en Estados Unidos',
+    `Short Title` == 'HARP OF BURMA' ~ 'Harp of Burma',
+    `Short Title` == 'HEAD OFF & SPLIT' ~ 'Head Off & Split',
+    `Short Title` == 'HEY WHIPPLE, SQUEEZE THIS : THE CLASSIC GUIDE TO CREATING GREAT ADVERTISING' ~ 'Hey Whipple, Squeeze This',
+    `Short Title` == 'HISTORY: A VERY SHORT INTRODUCTION' ~ 'History: A Very Short Introduction',
+    `Short Title` == 'HOW GREAT LEADERS THINK : THE ART OF REFRAMING' ~ 'How Great Leaders Think', 
+    `Short Title` == 'HOW TO KEEP YOUR COOL : AN ANCIENT GUIDE TO ANGER MANAGEMENT' ~ 'How to Keep Your Cool',
+    `Short Title` == 'HOW TO WRITE A LOT' ~ 'How to Write a Lot: A Practical Guide to Productive Academic Writing',
+    `Short Title` == 'HUMAN BIOLOGY' ~ 'Human Biology',
+    `Short Title` == 'HUMAN OSTEOLOGY' ~ 'Human Osteology',
+    `Short Title` == 'HUMAN RIGHTS AND SOCIAL JUSTICE IN A GLOBAL PERSPECTIVE' ~ 'Human Rights and Social Justice in a Global Perspective: An Introduction to International Social Work',
+    `Short Title` == 'HUMAN RIGHTS AND SOCIAL JUSTICE IN A GLOBAL PERSPECTIVE : AN INTRODUCTION TO INTERNATIONAL SOCIAL WORK' ~ 'Human Rights and Social Justice in a Global Perspective: An Introduction to International Social Work',
+    `Short Title` == 'IA:1177 B. C. : THE YEAR CIVILIZATION COLLAPSED: REVISED AND UPDATED' ~ '1177 B.C.',
+    `Short Title` == 'IA:ADVANCED LINEAR ALGEBRA FOR ENGINEERS WITH MATLAB' ~ 'Advanced Linear Algebra for Engineers with MATLAB',
+    `Short Title` == 'IA:APPLIED MULTIPLE REGRESS/CORR ANALY' ~ 'Applied Multiple Regression/Correlation Analysis for the Behavioral Sciences',
+    `Short Title` == 'IA:BLACK ELK SPEAKS' ~ 'Black Elk Speaks',
+    `Short Title` == 'IA:BUILDING THE BLACK METROPOLIS : AFRICAN AMERICAN ENTREPRENEURSHIP IN CHICAGO' ~ 'Building the Black Metropolis',
+    `Short Title` == 'IA:EMBODIED AVATARS : GENEALOGIES OF BLACK FEMINIST ART AND PERFORMANCE' ~ 'Embodied Avatars',
+    `Short Title` == 'IA:ETHICS FOR BEHAVIOR ANALYSTS' ~ 'Ethics for Behavior Analysts',
+    `Short Title` == 'IA:FOOD POLICY IN THE UNITED STATES' ~ 'Food Policy in the United States',
+    `Short Title` == 'IA:FORENSIC ANTHROPOLOGY' ~ 'Forensic Anthropology',
+    `Short Title` == 'IA:GLOBALIZATION OF EDUCATION' ~ 'Globalization of Education',
+    `Short Title` == 'IA:MODELS OF THE MIND' ~ 'Models of the Mind',
+    `Short Title` == 'IA:NEXT STEPS : DECISION CASES FOR SOCIAL WORK PRACTICE' ~ 'Next Steps',
+    `Short Title` == "IA:ORTNER'S IDENTIFICATION OF PATHOLOGICAL CONDITIONS IN HUMAN SKELETAL REMAINS" ~ "Ortner's Identification of Pathological Conditions in Human Skeletal Remains",
+    `Short Title` == 'IA:PARABLE OF THE SOWER' ~ 'Parable of the Sower',
+    `Short Title` == 'IA:PROBABILITY, A GRADUATE COURSE' ~ 'Probability: A Graduate Course',
+    `Short Title` == 'IA:PSYCHOANALYSIS UNDER OCCUPATION : PRACTICING RESISTANCE IN PALESTINE' ~ 'Psychoanalysis Under Occupation',
+    `Short Title` == 'IA:RECKONING WITH SLAVERY : GENDER, KINSHIP, AND CAPITALISM IN THE EARLY BLACK ATLANTIC' ~ 'Reckoning with Slavery',
+    `Short Title` == 'IA:REGRESSION METHODS IN BIOSTATISTICS' ~ 'Regression Methods in Biostatistics',
+    `Short Title` == 'IA:RESEARCH METHODS FOR SPORT MANAGEMENT' ~ 'Research Methods for Sport Management',
+    `Short Title` == 'IA:SICK ENOUGH : A GUIDE TO THE MEDICAL COMPLICATIONS OF EATING DISORDERS' ~ 'Sick Enough',
+    `Short Title` == 'IA:SOCRATIC QUESTIONING FOR THERAPISTS AND COUNSELORS : LEARN HOW TO THINK AND INTERVENE LIKE A COGNITIVE BEHAVIOR THERAPIST' ~ 'Socratic Questioning for Therapists and Counselors',
+    `Short Title` == 'IA:STABILIZATION AND DYNAMIC OF PREMIXED SWIRLING FLAMES : PREVAPORIZED, STRATIFIED, PARTIALLY, AND FULLY PREMIXED REGIMES' ~ 'Stabilization and Dynamic of Premixed Swirling Flames',
+    `Short Title` == 'IA:TRAUMA AND MENTAL HEALTH SOCIAL WORK WITH URBAN POPULATIONS' ~ 'Trauma and Mental Health Social Work With Urban Populations',
+    `Short Title` == 'IA:UNDESIRABLES : A HOLOCAUST JOURNEY TO NORTH AFRICA' ~ 'Undesirables',
+    `Short Title` == 'INFLUENCE WITHOUT AUTHORITY W/LIFETIME ACCESS' ~ 'Influence Without Authority',
+    `Short Title` == 'INFORMATION SERVICES TODAY : AN INTRODUCTION' ~ 'Information Services Today: An Introduction',
+    `Short Title` == 'INSTRUCTIONAL SUPERVISION : APPLYING TOOLS AND CONCEPTS' ~ 'Instructional Supervision',
+    `Short Title` == 'INTERNATIONAL ENERGY MARKETS : UNDERSTANDING PRICING, POLICIES AND PROFITS' ~ 'International Energy Markets',
+    `Short Title` == 'INTERNATIONAL TRADE AND AGRICULTURE : THEORIES AND PRACTICES' ~ 'International Trade and Agriculture',
+    `Short Title` == 'INTRODUCTION TO AMERICAN DEAF CULTURE' ~ 'Introduction to American Deaf Culture',
+    `Short Title` == 'INTRODUCTION TO APPLIED NONLINEAR DYNAMICAL SYSTEMS AND CHAOS' ~ 'Introduction to Applied Nonlinear Dynamical Systems and Chaos',
+    `Short Title` == 'INTRODUCTION TO CRISIS AND TRAUMA COUNSELING' ~ 'Introduction to crisis and trauma counseling',
+    `Short Title` == 'INTRODUCTION TO INDUSTRIAL ORGANIZATION, SECOND EDITION' ~ 'Introduction to Industrial Organization, Second Edition',
+    `Short Title` == 'INTRODUCTION TO PARTIAL DIFFERENTIAL EQUATIONS' ~ 'Introduction to Partial Differential Equations',
+    `Short Title` == 'INTRODUCTION TO PARTIAL DIFFERENTIAL EQUATIONS (FREE DIGITAL ACCESS- UTK LIBRARY)' ~ 'Introduction to Partial Differential Equations',
+    `Short Title` == 'INTRODUCTION TO STOCHASTIC PROCESSES' ~ 'Introduction to Stochastic Processes',
+    `Short Title` == 'INVASIVE SPECIES : WHAT EVERYONE NEEDS TO KNOW?' ~ 'Invasive Species',
+    `Short Title` == "JACOB'S ROOM" ~ "Jacob's Room",
+    `Short Title` == 'JOHNS HOPKINS EVIDENCE-BASED PRACTICE FOR NURSES AND HEALTHCARE PROFESSIONALS, FOURTH EDITION' ~ 'Johns Hopkins Evidence-Based Practice for Nurses and Healthcare Professionals, Fourth Edition',
+    `Short Title` == 'JUST PRACTICE: A SOCIAL JUSTICE APPROACH TO SOCIAL WORK' ~ 'Just Practice: A Social Justice Approach to Social Work',
+    `Short Title` == 'KEYWORDS IN SOUND' ~ 'Keywords in Sound',
+    `Short Title` == 'LANGUAGE, TRUTH AND LOGIC' ~ 'Language, Truth and Logic',
+    `Short Title` == 'LEADING WITH QUESTIONS : HOW LEADERS DISCOVER POWERFUL ANSWERS BY KNOWING HOW AND WHAT TO ASK' ~ 'Leading with Questions: How Leaders Discover Powerful Answers by Knowing How and What to Ask',
+    `Short Title` == 'LEAN PRODUCTION FOR COMPETITIVE ADVANTAGE : A COMPREHENSIVE GUIDE TO LEAN METHODOLOGIES AND MANAGEMENT PRACTICES, SECOND EDITION' ~ 'Lean Production for Competitive Advantage',
+    `Short Title` == 'LEARNING TO BE TEACHER LEADERS' ~ 'Learning to Be Teacher Leaders',
+    `Short Title` == 'LINCOLN AND THE TRIUMPH OF THE NATION : CONSTITUTIONAL CONFLICT IN THE AMERICAN CIVIL WAR' ~ 'Lincoln and the Triumph of the Nation',
+    `Short Title` == 'LINGUISTICS OF ASL: INTRO (W/DVD)' ~ 'Linguistics of American Sign Language, 5th Ed.',
+    `Short Title` == 'LITERARY THEORY : AN ANTHOLOGY' ~ 'Literary Theory: An Anthology',
+    `Short Title` == 'MACBETH' ~ 'Macbeth',
+    `Short Title` == 'MACHINING DYNAMICS : FREQUENCY RESPONSE TO IMPROVED PRODUCTIVITY' ~ 'Machining Dynamics',
+    `Short Title` == "MADAM C. J. WALKER'S GOSPEL OF GIVING : BLACK WOMEN'S PHILANTHROPY DURING JIM CROW" ~ "Madam C. J. Walker's Gospel of Giving",
+    `Short Title` == 'MAKE IT STICK' ~ 'Make It Stick',
+    `Short Title` == 'MAKE IT STICK : THE SCIENCE OF SUCCESSFUL LEARNING' ~ 'Make It Stick',
+    `Short Title` == 'MAKING AND TINKERING WITH STEM : SOLVING DESIGN CHALLENGES WITH YOUNG CHILDREN' ~ 'Making and Tinkering with STEM',
+    `Short Title` == 'MAKING RACE AND NATION' ~ 'Making Race and Nation',
+    `Short Title` == "MANAGING VULNERABILITY : SOUTH AFRICA'S STRUGGLE FOR A DEMOCRATIC RHETORIC" ~ 'Managing Vulnerability',
+    `Short Title` == 'MASTERING QGIS  SECOND EDITION' ~ 'Mastering QGIS - Second Edition',
+    `Short Title` == 'MATH METHODS F/PHYSICISTS' ~ 'Math Methods for Physicists',
+    `Short Title` == 'MATHEMATICAL METHODS FOR PHYSICISTS (FREE DIGITAL ACCESS- UTK LIBRARY)' ~ 'Mathematical Methods for Physicists (Seventh Edition)',
+    `Short Title` == 'MAXIMIZING THE IMPACT OF COMICS IN YOUR LIBRARY' ~ 'Maximizing the Impact of Comics in Your Library: Graphic Novels, Manga, and More',
+    `Short Title` == 'MERE CHRISTIANITY' ~ "C. S. Lewis's Mere Christianity",
+    `Short Title` == 'METALS AND SOCIETY : AN INTRODUCTION TO ECONOMIC GEOLOGY' ~ 'Metals and Society',
+    `Short Title` == 'MIDDLE RANGE THEORY FOR NURSING' ~ 'Middle Range Theory for Nursing',
+    `Short Title` == 'MILK AND FILTH' ~ 'Milk and Filth',
+    `Short Title` == 'MODULAR FORMS: A CLASSICAL/COMPUTATIONAL INTRO (FREE DIGITAL ACCESSUTK LIBRARY)' ~ 'Modular Forms: A Classical And Computational Introduction',
+    `Short Title` == "MY GRANDMOTHER'S HANDS : RACIALIZED TRAUMA AND THE PATHWAY TO MENDING OUR HEARTS AND BODIES" ~ "My Grandmother's Hands: Racialized Trauma and the Pathway to Mending our Hearts and Bodies",
+    `Short Title` == 'NEW JIM CROW' ~ 'The New Jim Crow',
+    `Short Title` == 'NEXT STEPS: DECISION CASES F/SOCIAL WORK PRACTICE (FREE DIGITAL ACCESS - UTK LIBRARY)' ~ 'Next Steps',
+    `Short Title` == 'OBIT' ~ 'Obit',
+    `Short Title` == 'ON THE HISTORY OF POLITICAL PHILOSOPHY : GREAT POLITICAL THINKERS FROM THUCYDIDES TO LOCKE' ~ 'On the History of Political Philosophy',
+    `Short Title` == "ORTNER'S IDENTIFICATION OF PATHOLOGICAL CONDITIONS IN HUMAN SKELETAL REMAINS" ~ "Ortner's Identification of Pathological Conditions in Human Skeletal Remains",
+    `Short Title` == 'PARADISE: BY THE WINNER OF THE NOBEL PRIZE IN LITERATURE 2021' ~ 'Paradise',
+    `Short Title` == 'PASSING' ~ 'Passing',
+    `Short Title` == 'PEDAGOGY OF THE OPPRESSED 30TH ANNIV ED W/NEW INTRO' ~ 'Pedagogy of the Oppressed',
+    `Short Title` == 'PHASES OF TERRORISM IN THE AGE OF GLOBALIZATION : FROM CHRISTOPHER COLUMBUS TO OSAMA BIN LADEN' ~ 'Phases of Terrorism in the Age of Globalization',
+    `Short Title` == 'PLANETARY GEOLOGY: AN INTRODUCTION' ~ 'Planetary Geology',
+    `Short Title` == 'PLANETARY GEOLOGY : AN INTRODUCTION' ~ 'Planetary Geology',
+    `Short Title` == 'PLANNING FOR PLAY, OBSERVATION, AND LEARNING IN PRESCHOOL AND KINDERGARTEN' ~ 'Planning for Play, Observation, and Learning in Preschool and Kindergarten',
+    `Short Title` == 'POLITICAL STYLE : THE ARTISTRY OF POWER' ~ 'Political Style',
+    `Short Title` == 'POWER: RADICAL VIEW' ~ 'POWER',
+    `Short Title` == 'PRACTICAL GUIDE TO COMMERCIAL REAL' ~ 'A Practical Guide to Commercial Real Estate Transactions: From Contract to Closing',
+    `Short Title` == 'PRACTICAL IMPLEMENTATION IN SOCIAL WORK PRACTICE : A GUIDE TO ENGAGING IN EVIDENCE-BASED PRACTICE' ~ 'Practical Implementation in Social Work Practice',
+    `Short Title` == 'PRACTICAL RADICALS : SEVEN STRATEGIES TO CHANGE THE WORLD' ~ 'Practical Radicals',
+    `Short Title` == 'PREDICTIVE ANALYTICS : THE POWER TO PREDICT WHO WILL CLICK, BUY, LIE, OR DIE' ~ 'Predictive Analytics',
+    `Short Title` == '(PRINT) FORENSIC ANTHROPOLOGY' ~ 'Forensic Anthropology',
+    `Short Title` == '(PRINT) PEDAGOGICAL GRAMMAR' ~ 'Pedagogical Grammar',
+    `Short Title` == '(PRINT) SONG OF THE EARTH' ~ 'The Song of the Earth',
+    `Short Title` == 'PROBABILITY, A GRADUATE COURSE (FREE DIGITAL ACCESS- UTK LIBRARY)' ~ 'Probability: A Graduate Course',
+    `Short Title` == 'PROBABILITY, A GRADUATE COURSE' ~ 'Probability: A Graduate Course',
+    `Short Title` == 'PROBABILITY, A GRADUATE COURSE (FREE DIGITAL ACCESS UTK LIBRARY)' ~ 'Probability: A Graduate Course',
+    `Short Title` == 'PROCESSED BASED CBT' ~ 'Process-Based CBT: The Science and Core Clinical Competencies of Cognitive Behavioral Therapy',
+    `Short Title` == 'PROFESSIONAL DEVELOPMENT : WHAT WORKS' ~ 'Professional Development: What Works',
+    `Short Title` == 'PROPERTY OF THE REBEL LIBRARIAN' ~ 'Property of the Rebel Librarian',
+    `Short Title` == 'PUBLIC LIBRARIES AND THEIR COMMUNITIES' ~ 'Public Libraries and Their Communities',
+    `Short Title` == 'PUBLIC SPEAKING FOR ENGINEERS : COMMUNICATING EFFECTIVELY WITH CLIENTS, THE PUBLIC, AND LOCAL GOVERNMENT' ~ 'Public Speaking for Engineers: Communicating Effectively with Clients, the Public, and Local Government',
+    `Short Title` == 'QUALITATIVE RESEARCH : A GUIDE TO DESIGN AND IMPLEMENTATION' ~ 'Qualitative Research',
+    `Short Title` == 'QUEER RELIGIOSITIES : AN INTRODUCTION TO QUEER AND TRANSGENDER STUDIES IN RELIGION' ~ 'Queer Religiosities',
+    `Short Title` == 'R FOR POLITICAL SCIENCE RESEARCH : AN INTRODUCTION FOR ABSOLUTE BEGINNERS' ~ 'R for Political Science Research',
+    `Short Title` == 'RACE AND REUNION : THE CIVIL WAR IN AMERICAN MEMORY' ~ 'Race and Reunion',
+    `Short Title` == 'RACIAL THEORIES IN SOCIAL SCIENCE' ~ 'Racial Theories in Social Science: A Systemic Racism Critique',
+    `Short Title` == 'RAMBLES OF A RUNAWAY FROM SOUTHERN SLAVERY' ~ 'Rambles of a Runaway from Southern Slavery',
+    `Short Title` == 'REAL ANALYSIS FOR THE UNDERGRADUATE : WITH AN INVITATION TO FUNCTIONAL ANALYSIS' ~ 'Real Analysis for the Undergraduate',
+    `Short Title` == 'RECENT DEVELOPMENTS IN SOUTHEASTERN ARCHAEOLOGY' ~ 'Recent Developments in Southeastern Archaeology',
+    `Short Title` == 'RECREATION PROGRAMMING, 8TH ED. DESIGNING, STAGING, AND MANAGING THE DELIVERY OF LEISURE EXPERIENCES' ~ 'Recreation Programming',
+    `Short Title` == 'REGRESSION ANALYSIS AND LINEAR MODELS : CONCEPTS, APPLICATIONS, AND IMPLEMENTATION' ~ 'Regression Analysis and Linear Models',
+    `Short Title` == 'REGRESSION METHODS IN BIOSTATISTICS' ~ 'Regression Methods in Biostatistics',
+    `Short Title` == 'RELIGION IN A CHANGING WORKPLACE' ~ 'Religion in a Changing Workplace',
+    `Short Title` == 'RESPONSIBLE CONDUCT OF RESEARCH' ~ 'Responsible Conduct of Research',
+    `Short Title` == 'RULES OF PLAY : GAME DESIGN FUNDAMENTALS' ~ 'Rules of Play: Game Design Fundamentals',
+    `Short Title` == 'SCHOOL SOCIAL WORK : A SKILLS-BASED COMPETENCY APPROACH' ~ 'School Social Work',
+    `Short Title` == 'SCIENCE NOTEBOOKS IN STUDENT-CENTERED CLASSROOMS' ~ 'Science Notebooks in Student-Centered Classrooms',
+    `Short Title` == 'SCRAPING BY' ~ 'Scraping By: Wage Labor, Slavery, and Survival in Early Baltimore',
+    `Short Title` == 'SENSORY EVALUATION OF FOOD : PRINCIPLES AND PRACTICES' ~ 'Sensory Evaluation of Food',
+    `Short Title` == 'SHIPS AND SEAMANSHIP IN THE ANCIENT WORLD' ~ 'Ships and Seamanship in the Ancient World',
+    `Short Title` == 'SILAS MARNER : THE WEAVER OF RAVELOE' ~ 'Silas Marner: The Weaver of Raveloe',
+    `Short Title` == 'SILENT WITNESSES' ~ 'Silent Witnesses',
+    `Short Title` == 'SILENT WITNESSES : THE OFTEN GRUESOME BUT ALWAYS FASCINATING HISTORY OF FORENSIC SCIENCE' ~ 'Silent Witnesses',
+    `Short Title` == 'SKILL ACQUISITION IN SPORT : THEORY AND PRACTICE' ~ 'Skill Acquisition in Sport',
+    `Short Title` == 'SOCIAL MOVEMENTS : THE STRUCTURE OF COLLECTIVE MOBILIZATION' ~ 'Social Movements: The Structure of Collective Mobilization',
+    `Short Title` == 'SOCIAL THEORY OF INTERNATIONAL POLITICS' ~ 'Social Theory of International Politics',
+    `Short Title` == 'SOCIAL WELFARE POLICY F/A SUSTAINABLE FUTURE' ~ 'Social Welfare Policy for a Sustainable Future',
+    `Short Title` == 'SOCIAL WORK PRACTICE & PSYCHOPHARMACOLOGY' ~ 'Social Work Practice and Psychopharmacology',
+    `Short Title` == 'SOCIAL WORK VALUES AND ETHICS' ~ 'Social Work Values and Ethics',
+    `Short Title` == 'SOCRATIC QUESTIONING FOR THERAPISTS AND COUNSELORS : LEARN HOW TO THINK AND INTERVENE LIKE A COGNITIVE BEHAVIOR THERAPIST' ~ 'Socratic Questioning for Therapists and Counselors',
+    `Short Title` == 'SONG WALKING : WOMEN, MUSIC, AND ENVIRONMENTAL JUSTICE IN AN AFRICAN BORDERLAND' ~ 'Song Walking: Women, Music, and Environmental Justice in an African Borderland',
+    `Short Title` == 'SONS ET SENS W/LIFETIME ACCESS' ~ 'Sons et Sens',
+    `Short Title` == 'SOUNDING LIKE A NO-NO : QUEER SOUNDS AND ECCENTRIC ACTS IN THE POST-SOUL ERA' ~ 'Sounding Like a No-No',
+    `Short Title` == 'SPEECH TO PRINT : LANGUAGE ESSENTIALS FOR TEACHERS' ~ 'Speech to Print',
+    `Short Title` == 'STATE AND LOCAL PUBLIC FINANCE' ~ 'State and Local Public Finance',
+    `Short Title` == 'STATISTICAL MECHANICS : PRINCIPLES AND SELECTED APPLICATIONS' ~ 'Statistical Mechanics',
+    `Short Title` == 'STOCHASTIC DIFFERENTIAL EQUATIONS : INTRO W/APPLICATIONS (FREE DIGITAL ACCESSUTK LIBRARY)' ~ 'Stochastic Differential Equations',
+    `Short Title` == "STOELTING'S PHARMACOLOGY AND PHYSIOLOGY IN ANESTHETIC PRACTICE" ~ "Stoelting's Pharmacology and Physiology in Anesthetic Practice",
+    `Short Title` == 'STORY PROOF : THE SCIENCE BEHIND THE STARTLING POWER OF STORY' ~ 'Story Proof: The Science Behind the Startling Power of Story',
+    `Short Title` == 'STORYTELLING WITH DATA : A DATA VISUALIZATION GUIDE FOR BUSINESS PROFESSIONALS' ~ 'Storytelling with Data',
+    `Short Title` == 'STORYTELLING WITH YOU : PLAN, CREATE, AND DELIVER A STELLAR PRESENTATION' ~ 'Storytelling with You: Plan, Create, and Deliver a Stellar Presentation',
+    `Short Title` == 'STRANGE AS THIS WEATHER HAS BEEN : A NOVEL' ~ 'Strange As This Weather Has Been',
+    `Short Title` == 'STRATEGY IN 3D' ~ 'Strategy in 3D',
+    `Short Title` == 'STRATEGY IN 3D : ESSENTIAL TOOLS TO DIAGNOSE, DECIDE, AND DELIVER' ~ 'Strategy in 3D',
+    `Short Title` == 'SUN ALSO RISES' ~ 'The Sun Also Rises',
+    `Short Title` == 'SUPPLY CHAIN PLANNING AND ANALYTICS' ~ 'Supply Chain Planning and Analytics',
+    `Short Title` == 'SUPPLY CHAIN TRANSFORMATION: BUILDING AND EXECUTING AN INTEGRATED SUPPLY CHAIN STRATEGY' ~ 'Supply Chain Transformation',
+    `Short Title` == 'SURVEY RESEARCH AND ANALYSIS' ~ 'Survey Research and Analysis',
+    `Short Title` == 'SYSTEMATIC INSTRUCTION FOR STUDENTS WITH MODERATE AND SEVERE DISABILITIES' ~ 'Systematic Instruction for Students with Moderate and Severe Disabilities',
+    `Short Title` == 'SYSTEMS THINKING FOR SOCIAL CHANGE : A PRACTICAL GUIDE TO SOLVING COMPLEX PROBLEMS, AVOIDING UNINTENDED CONSEQUENCES, AND ACHIEVING LASTING RESULTS' ~ 'Systems Thinking For Social Change: A Practical Guide To Solving Complex Problems, Avoiding Unintended Consequences, And Achieving Lasting Results',
+    `Short Title` == 'TEACHING AND LEARNING STEM : A PRACTICAL GUIDE' ~ 'Teaching and Learning STEM',
+    `Short Title` == 'TEACHING ENGLISH AS A FOREIGN OR SECOND LANGUAGE' ~ 'Teaching English As a Foreign or Second Language, Third Edition',
+    `Short Title` == 'TEACHING ENGLISH AS A FOREIGN OR SECOND LANGUAGE, THIRD EDITION :' ~ 'Teaching English As a Foreign or Second Language, Third Edition',
+    `Short Title` == 'THE AMATEUR HOUR : A HISTORY OF COLLEGE TEACHING IN AMERICA' ~ 'The Amateur Hour',
+    `Short Title` == 'THE AMERICAN TELEVISION INDUSTRY' ~ 'The American Television Industry',
+    `Short Title` == 'THE ANTINOMIAN CONTROVERSY, 16361638 : A DOCUMENTARY HISTORY' ~ 'The Antinomian Controversy, 1636-1638',
+    `Short Title` == 'THE BASICS OF PUBLIC BUDGETING AND FINANCIAL MANAGEMENT : A HANDBOOK FOR ACADEMICS AND PRACTITIONERS' ~ 'Basics of Public Budgeting and Financial Management: A Handbook for Academics and Practitioners',
+    `Short Title` == 'THE ANXIOUS GENERATION : HOW THE GREAT REWIRING OF CHILDHOOD IS CAUSING AN EPIDEMIC OF MENTAL ILLNESS' ~ 'The Anxious Generation',
+    `Short Title` == 'THE ART OF THE PITCH : PERSUASION AND PRESENTATION SKILLS THAT WIN BUSINESS' ~ 'The Art of the Pitch',
+    `Short Title` == 'THE BUDDHIST WORLD OF SOUTHEAST ASIA' ~ 'The Buddhist World of Southeast Asia',
+    `Short Title` == 'THE CASTRATO : REFLECTIONS ON NATURES AND KINDS' ~ 'The Castrato',
+    `Short Title` == 'THE CHILDREN OF SOLAGA : INDIGENOUS BELONGING ACROSS THE U. S. -MEXICO BORDER' ~ 'The Children of Solaga',
+    `Short Title` == 'THE COMPREHENSIVE GUIDE TO INTERDISCIPLINARY VETERINARY SOCIAL WORK' ~ 'The Comprehensive Guide to Interdisciplinary Veterinary Social Work',
+    `Short Title` == 'THE ETHICAL EXECUTIVE : BECOMING AWARE OF THE ROOT CAUSES OF UNETHICAL BEHAVIOR: 45 PSYCHOLOGICAL TRAPS THAT EVERY ONE OF US FALLS PREY TO' ~ 'The Ethical Executive',
+    `Short Title` == 'THE FASCINATING WORLD OF GRAPH THEORY' ~ 'The Fascinating World of Graph Theory',
+    `Short Title` == 'THE IDEAL TEAM PLAYER : HOW TO RECOGNIZE AND CULTIVATE THE THREE ESSENTIAL VIRTUES' ~ 'The Ideal Team Player: How to Recognize and Cultivate the Three Essential Virtues',
+    `Short Title` == 'THE LIFE OF SAINT KATHERINE OF ALEXANDRIA' ~ 'The Life of Saint Katherine of Alexandria',
+    `Short Title` == "THE MEDIATOR'S HANDBOOK : REVISED AND EXPANDED FOURTH EDITION" ~ "The Mediator's Handbook",
+    `Short Title` == 'THE MITKI AND THE ART OF POSTMODERN PROTEST IN RUSSIA' ~ 'The Mitki and the Art of Postmodern Protest in Russia',
+    `Short Title` == 'THE MUSEUM OF UNNATURAL HISTORIES' ~ 'The Museum of Unnatural Histories',
+    `Short Title` == 'THE NAMES OF THE PYTHON : BELONGING IN EAST AFRICA, 900 TO 1930' ~ 'The Names of the Python: Belonging in East Africa, 900 to 1930',
+    `Short Title` == 'THE NEW JIM CROW : MASS INCARCERATION IN THE AGE OF COLORBLINDNESS' ~ 'The New Jim Crow',
+    `Short Title` == 'THE OROMO MOVEMENT AND IMPERIAL POLITICS' ~ 'The Oromo Movement and Imperial Politics: Culture and Ideology in Oromia and Ethiopia',
+    `Short Title` == 'THE STORY OF RELIGION IN AMERICA : AN INTRODUCTION' ~ 'The Story of Religion in America: An Introduction',
+    `Short Title` == 'THE STUDENT LEADERSHIP CHALLENGE : STUDENT WORKBOOK AND LEADERSHIP JOURNAL' ~ 'The Student Leadership Challenge: Student Workbook and Leadership Journal',
+    `Short Title` == 'THE SUPPLY AND OPERATIONS MANGEMENT COLLECTION: SUPPLY CHAIN PLANNING AND ANALYTICS : THE RIGHT PRODUCT IN THE RIGHT PLACE AT THE RIGHT TIME' ~ 'Supply Chain Planning and Analytics',
+    `Short Title` == 'THE TRADITION' ~ 'The Tradition',
+    `Short Title` == 'THE TROJANS AND THEIR NEIGHBOURS' ~ 'The Trojans and Their Neighbours',
+    `Short Title` == 'THE TWO FUNDAMENTAL PROBLEMS OF ETHICS' ~ 'The Two Fundamental Problems of Ethics',
+    `Short Title` == 'THE WORLD OF MEXICAN MIGRANTS : THE ROCK AND THE HARD PLACE' ~ 'The World of Mexican Migrants',
+    `Short Title` == 'THEORIES OF CHILDHOOD' ~ 'Theories of Childhood, Second Edition',
+    `Short Title` == 'THROUGH THE ARC OF THE RAIN FOREST' ~ 'Through the Arc of the Rain Forest',
+    `Short Title` == 'TIME SERIES ECONOMETRICS : LEARNING THROUGH REPLICATION' ~ 'Time Series Econometrics',
+    `Short Title` == 'TOTALITARIANISM' ~ 'Totalitarianism',
+    `Short Title` == 'TRANSPORT MODELING FOR ENVIRONMENTAL ENGINEERS AND SCIENTISTS' ~ 'Transport Modeling for Environmental Engineers and Scientists',
+    `Short Title` == 'TRAUMA-FOCUSED ACT' ~ "Trauma-Focused ACT: A Practitioner's Guide to Working with Mind, Body, and Emotion Using Acceptance and Commitment Therapy",
+    `Short Title` == 'TREE STORY : THE HISTORY OF THE WORLD WRITTEN IN RINGS' ~ 'Tree Story',
+    `Short Title` == 'UNACCUMSTOMED EARTH W/LIFETIME ACCESS' ~ 'Unaccustomed Earth',
+    `Short Title` == 'UNKINDNESS OF GHOSTS' ~ 'An Unkindness of Ghosts',
+    `Short Title` == 'UNLOCKING MULTILINGUAL LEARNERS? POTENTIAL' ~ 'Unlocking Multilingual Learners Potential',
+    `Short Title` == 'UNMENTIONABLES : TEXTILES, GARMENT WORK, AND THE SYRIAN AMERICAN WORKING CLASS' ~ 'Unmentionables',
+    `Short Title` == 'VERSIFICATION(OP)(FREE DIGITAL ACCESS-UTK LIBRARY)' ~ 'Versification',
+    `Short Title` == "WATER 4. 0 : THE PAST, PRESENT, AND FUTURE OF THE WORLD'S MOST VITAL RESOURCE" ~ 'Water 4. 0',
+    `Short Title` == "WETZEL'S LIMNOLOGY : LAKE AND RIVER ECOSYSTEMS" ~ "Wetzel's Limnology (Fourth Edition)",
+    `Short Title` == 'WHAT NOISE AGAINST THE CANE' ~ 'What Noise Against the Cane',
+    `Short Title` == 'WHAT REALLY WORKS WITH EXCEPTIONAL LEARNERS' ~ 'What Really Works with Exceptional Learners',
+    `Short Title` == 'WHEN ASIA WAS WORLD' ~ 'When Asia Was the World',
+    `Short Title` == 'WHEN MY BROTHER WAS AN AZTEC' ~ 'When My Brother Was an Aztec',
+    `Short Title` == "WHERE'S THE MATH? : BOOKS, GAMES, AND ROUTINES TO SPARK CHILDREN'S THINKING" ~ "Where's the Math?",
+    `Short Title` == "WHY KIDS CAN'T READ : CONTINUING TO CHALLENGE THE STATUS QUO IN EDUCATION" ~ "Why Kids Can't Read",
+    `Short Title` == 'WHY PEOPLE DIE BY SUICIDE' ~ 'Why People Die by Suicide',
+    `Short Title` == 'WHY WAR? : THE CULTURAL LOGIC OF IRAQ, THE GULF WAR, AND SUEZ' ~ 'Why War?',
+    `Short Title` == 'WHY WE LOST THE ERA' ~ 'Why We Lost the Era',
+    `Short Title` == 'WICKED FLESH : BLACK WOMEN, INTIMACY, AND FREEDOM IN THE ATLANTIC WORLD' ~ 'Wicked Flesh',
+    `Short Title` == 'WORLD OF POMPEII (W/CD ONLY)' ~ 'The World of Pompeii',
+    `Short Title` == 'WORLD RELIGIONS IN SEVEN SENTENCES : A SMALL INTRODUCTION TO A VAST TOPIC' ~ 'World Religions in Seven Sentences: A Small Introduction to a Vast Topic',
+    `Short Title` == 'YAGUARETE WHITE' ~ 'Yaguareté White',
+    `Short Title` == 'YORK MYSTERY PLAYS' ~ 'York Mystery Plays',
+    `Short Title` == 'YVAIN : THE KNIGHT OF THE LION' ~ 'Yvain',
+    `Short Title` == 'ZAMI: A NEW SPELLING OF MY NAME : A BIOMYTHOGRAPHY' ~ 'Zami',
+    
+    #Fixes for Titles With Extra Text in Them or Different Formatting, but No Usage
+    ##This is done to make the PowerBI report look nice
+    
+    `Short Title` == 'A COURSE IN ENUMERATION PROBABILITY, A GRADUATE COURSE (FREE DIGITAL ACCESS UTK LIBRARY)' ~ 'A Course in Enumeration Probability, a Graduate Course',
+    `Short Title` == 'AFFRILACHIA (OLD COVE PRESS)' ~ 'Affrilachia',
+    `Short Title` == 'FUNDAMENTALS OF PHYSICS II : ELECTROMAGNETISM, OPTICS, AND QUANTUM MECHANICS' ~ 'Fundamentals of Physics II: Electromagnetism, Optics, and Quantum Mechanics',
+    `Short Title` == 'HANDBOOK F/CLASSICAL RESEARCH' ~ 'Handbook for Classical Research',
+    `Short Title` == 'UNDERSTANDING SPIRITUALITY AND THE SACRED IN SOCIAL WORK PRACTICE : SPIRITED CONVERSATIONS' ~ 'Understanding Spirituality And The Sacred In Social Work Practice',
+    `Short Title` == 'UNIVERSITY PHYSICS VOLUME 3 (FREE ACCESS- OPENSTAX)' ~ 'University Physics: Volume 3',
+    
+    #Default Case - Format as a Title
+    ##Also done to make the PowerBI report look nice
+    .default = str_to_title(`Short Title`)
+  )) |>
+  select(UsageTitle, `Short Title`, `Book Author`, ISBN, `MMS ID`, `Book Publisher`, `Electronic Availability`, Semester)
+
+bookstoreListShort
+```
+
+
+
+
+
+# Load Usage Database
+
+
+FOR EACH SEMESTER, add new sum functions for each new month of usage being tracked. 
+
+This will also require that usage being gathered in advance. It is best practice to use the "mid-semester" TR_B3 table built for this project, since the usage will need to be gathered outside of our normal January and July gathering periods.
+
+
+```{r}
+con <- dbConnect(SQLite(), "C:\\Users\\aharrima\\OneDrive - University of Tennessee\\Documents\\Big_Usage_Database_Updated.db")
+
+TR_B3 <- dbGetQuery(con,
+                    "SELECT Title
+                    , SUM(`Jan-2024`) AS `Jan-2024`
+                    , SUM(`Feb-2024`) AS `Feb-2024`
+                    , SUM(`Mar-2024`) AS `Mar-2024`
+                    , SUM(`Apr-2024`) AS `Apr-2024`
+                    , SUM(`May-2024`) AS `May-2024`
+                    , SUM(`Jun-2024`) AS `Jun-2024`
+                    , SUM(`Jul-2024`) AS `Jul-2024`
+                    , SUM(`Aug-2024`) AS `Aug-2024`
+                    , SUM(`Sep-2024`) AS `Sep-2024`
+                    , SUM(`Oct-2024`) AS `Oct-2024`
+                    , SUM(`Nov-2024`) AS `Nov-2024`
+                    , SUM(`Dec-2024`) AS `Dec-2024`
+                    , SUM(`Jan-2025`) AS `Jan-2025`
+                    , SUM(`Feb-2025`) AS `Feb-2025`
+                    , SUM(`Mar-2025`) AS `Mar-2025`
+                    , SUM(`Apr-2025`) AS `Apr-2025`
+                    , SUM(`May-2025`) AS `May-2025`
+                    , SUM(`Jun-2025`) AS `Jun-2025`
+                    , SUM(`Jul-2025`) AS `Jul-2025`
+                    , SUM(`Aug-2025`) AS `Aug-2025`
+                    , SUM(`Sep-2025`) AS `Sep-2025`
+                    , SUM(`Oct-2025`) AS `Oct-2025`
+                    , SUM(`Nov-2025`) AS `Nov-2025`
+                    , SUM(`Dec-2025`) AS `Dec-2025`
+                    , SUM(`Jan-2026`) AS `Jan-2026`
+                    , SUM(`Feb-2026`) AS `Feb-2026`
+                    , SUM(`Mar-2026`) AS `Mar-2026`
+                    , SUM(`Apr-2026`) AS `Apr-2026`
+                    , SUM(`May-2026`) AS `May-2026`
+                    , Reporting_Period_Total
+                    FROM TR_B3_VolBooks
+                    WHERE Metric_Type == 'Unique_Title_Requests'
+                    GROUP BY Title
+                    ORDER BY Title")
+
+TR_B3 <- TR_B3 |>
+  mutate(Title = case_when(
+    Title == 'Social Movements' ~ 'Social Movements: The Structure of Collective Mobilization',
+    Title == 'The Ideal Team Player' ~ 'The Ideal Team Player: How to Recognize and Cultivate the Three Essential Virtues',
+    .default = Title
+  ))
+
+dim(TR_B3)
+```
+
+
+
+# Join to Bookstore List
+
+
+```{r}
+bookstoreWithUsage <- left_join(bookstoreListShort, TR_B3, by = c('UsageTitle' = 'Title'))
+
+bookstoreWithUsage
+```
+
+
+
+```{r}
+checkList <- bookstoreWithUsage |>
+  filter(is.na(Reporting_Period_Total) == TRUE) |>
+  arrange(UsageTitle)
+
+checkList
+```
+
+
+
+# Get Overall Usage for Each Title
+
+
+FOR EACH SEMESTER, add a new case to the case_when statement by copying a code block and adjusting semester and month names.
+
+
+MAKE SURE THE ZEROES APPEAR PROPERLY HERE
+
+```{r}
+bookstoreTitleUsage <- bookstoreWithUsage |>
+  group_by(UsageTitle, Semester) |>
+  summarise(Total_Usage = case_when(
+    Semester == 'Spring 2024' ~ ifelse(is.na(`Jan-2024`) == TRUE, 0, `Jan-2024`)
+                              + ifelse(is.na(`Feb-2024`) == TRUE, 0, `Feb-2024`)
+                              + ifelse(is.na(`Mar-2024`) == TRUE, 0, `Mar-2024`)
+                              + ifelse(is.na(`Apr-2024`) == TRUE, 0, `Apr-2024`)
+                              + ifelse(is.na(`May-2024`) == TRUE, 0, `May-2024`),
+    Semester == 'Fall 2024' ~ ifelse(is.na(`Aug-2024`) == TRUE, 0, `Aug-2024`)
+                              + ifelse(is.na(`Sep-2024`) == TRUE, 0, `Sep-2024`)
+                              + ifelse(is.na(`Oct-2024`) == TRUE, 0, `Oct-2024`)
+                              + ifelse(is.na(`Nov-2024`) == TRUE, 0, `Nov-2024`)
+                              + ifelse(is.na(`Dec-2024`) == TRUE, 0, `Dec-2024`),
+    Semester == 'Spring 2025' ~ ifelse(is.na(`Jan-2025`) == TRUE, 0, `Jan-2025`)
+                              + ifelse(is.na(`Feb-2025`) == TRUE, 0, `Feb-2025`)
+                              + ifelse(is.na(`Mar-2025`) == TRUE, 0, `Mar-2025`)
+                              + ifelse(is.na(`Apr-2025`) == TRUE, 0, `Apr-2025`)
+                              + ifelse(is.na(`May-2025`) == TRUE, 0, `May-2025`),
+    Semester == 'Fall 2025' ~ ifelse(is.na(`Aug-2025`) == TRUE, 0, `Aug-2025`)
+                              + ifelse(is.na(`Sep-2025`) == TRUE, 0, `Sep-2025`)
+                              + ifelse(is.na(`Oct-2025`) == TRUE, 0, `Oct-2025`)
+                              + ifelse(is.na(`Nov-2025`) == TRUE, 0, `Nov-2025`)
+                              + ifelse(is.na(`Dec-2025`) == TRUE, 0, `Dec-2025`),
+    Semester == 'Spring 2026' ~ ifelse(is.na(`Jan-2026`) == TRUE, 0, `Jan-2026`)
+                              + ifelse(is.na(`Feb-2026`) == TRUE, 0, `Feb-2026`)
+                              + ifelse(is.na(`Mar-2026`) == TRUE, 0, `Mar-2026`)
+                              + ifelse(is.na(`Apr-2026`) == TRUE, 0, `Apr-2026`)
+                              + ifelse(is.na(`May-2026`) == TRUE, 0, `May-2026`)
+  )) |>
+  ungroup() |>
+  group_by(UsageTitle, Semester) |>
+  summarise(Total_Usage = sum(Total_Usage)) |>
+  ungroup() |>
+  distinct() |>
+  mutate(Total_Usage = ifelse(is.na(Total_Usage) == TRUE, 0, Total_Usage)) |>
+  mutate(Has_Usage = ifelse(Total_Usage > 0, 'Yes', 'No')) |>
+  arrange(desc(Total_Usage))
+  
+bookstoreTitleUsage
+```
+
+
+# Get the Total Usage by Semester
+
+```{r}
+semesterUsage <- bookstoreTitleUsage |>
+  group_by(Semester) |>
+  summarise(Titles = n(),
+            Total_Usage = sum(Total_Usage),
+            Titles_With_Usage = sum(ifelse(Has_Usage == 'Yes', 1, 0))) |>
+  mutate(Title_Usage_Perc = round(100.0*(Titles_With_Usage / Titles), 1)) |>
+  arrange(Semester)
+
+semesterUsage
+```
+
+
+
+# Add in Cost Per Use and Average Use
+
+
+```{r}
+costPerUse <- inner_join(semesterUsage, ttsMetrics, by = 'Semester') 
+  
+costPerUseFinal <- costPerUse |>
+  mutate(Average_Usage = Total_Usage / Titles,
+         Cost = `Total Cost`) |>
+  mutate(Average_Cost = Cost / Titles) |>
+  mutate(Cost_Use = round(Cost / Total_Usage, 2)) |>
+  select(Semester, Titles, Total_Usage, Titles_With_Usage, Title_Usage_Perc, Average_Usage, Average_Cost, Cost_Use)
+
+costPerUseFinal
+```
+
+
+```{r}
+joinC <- inner_join(joinB, costPerUseFinal, by = 'Semester')
+
+joinC
+```
+
+
+
+# Get the Cost for Each Title
+
+All titles purchased after Fall 2024 should have a note attached to their order record suggesting they are part of the textbook program. See two cells below.
+
+
+## Spring 2024 and Fall 2024
+
+```{r}
+costs <- read_excel('Course Materials Bought for the Bookstore 2024.xlsx')
+
+filteredCosts <- costs |>
+  filter(Title %in% c(
+    # Spring 2024
+    'Models of the mind : how physics, engineering and mathematics have shaped our understanding of the brain /',
+    
+    # Fall 2024
+    'How to write a lot : a practical guide to productive academic writing /',
+    'Strategy in 3D : essential tools to diagnose, decide, & deliver /'
+
+  )) |>
+  mutate(CostTitle = case_when(
+    # Spring 2024
+    Title == 'Models of the mind : how physics, engineering and mathematics have shaped our understanding of the brain /' ~ 'Models of the Mind',
+    
+    # Fall 2024
+    Title == 'How to write a lot : a practical guide to productive academic writing /' ~ 'How to Write a Lot: A Practical Guide to Productive Academic Writing',
+    Title == 'Strategy in 3D : essential tools to diagnose, decide, & deliver /' ~ 'Strategy in 3D'
+  )) |>
+  mutate(Semester = case_when(
+    `Transaction Date Year-Month` %in% c('2023-11', '2023-12', '2024-01', '2024-02', '2024-03', '2024-04') ~ 'Spring 2024',
+    `Transaction Date Year-Month` %in% c('2024-05', '2024-06', '2024-07', '2024-08', '2024-09', '2024-10') ~ 'Fall 2024'
+  )) |>
+  select(CostTitle, Semester, `Transaction Expenditure Amount`)
+
+filteredCosts
+```
+
+
+
+## Spring 2025 to Present
+
+FOR EACH SEMESTER, re-download an updated "Course Materials Bought for the Bookstore All Time" file. Then, grab all titles purchased during that semester in the first part of the function below, and edit the Alma given names to MATCH THE USAGE NAMES FOR EACH TITLE in the second part of the function below. Also, add in a new line for the Semester fill-in by lining up the six-month Transation period to the new semester.
+
+
+
+## Load and Mutate the Order History File
+
+```{r}
+textbookOrders <- read_excel('Rialto All Order History Jun 12.xlsx') |>
+  filter(grepl('Textbook', `Internal note`) == TRUE) |>
+  mutate(Semester = case_when(
+    grepl('Spring 25', `Internal note`) == TRUE | grepl('Spring25', `Internal note`) == TRUE | grepl('Textbook Purchase', `Internal note`) == TRUE ~ 'Spring 2025',
+    grepl('Fall 2025', `Internal note`) == TRUE | grepl('Fall2025', `Internal note`) == TRUE ~ 'Fall 2025',
+    grepl('Spring2026', `Internal note`) == TRUE ~ 'Spring 2026',
+    Selector == 'Adiba, Afia' & grepl('Summer2026', `Internal note`) == FALSE ~ 'Spring 2026',
+    grepl('Summer2026', `Internal note`) == TRUE ~ 'Summer 2026',
+    .default = 'Not Applicable'
+  )) |>
+  mutate(`Total cost` = as.numeric(`Total cost`))
+```
+
+
+## Line Up Title Names to the Usage
+
+```{r}
+cleanTextbookOrders <- textbookOrders |>
+  mutate(CleanTitle = case_when(
+    # Spring 2025
+    Title == 'A Tale of Two Cultures : Qualitative and Quantitative Research in the Social Sciences' ~ 'A Tale of Two Cultures',
+    Title == "A Writer's Diary"  ~ "A Writer's Diary",
+    Title == 'After Victory : Institutions, Strategic Restraint, and the Rebuilding of Order after Major Wars, New Edition' ~ 'After Victory',
+    Title == 'Between the Acts (Annotated)' ~ 'Between the Acts',
+    Title == 'Bluets' ~ 'Bluets',
+    Title == 'Chaste Passions : Medieval English Virgin Martyr Legends' ~ 'Chaste Passions',
+    Title == 'Curves and Surfaces' ~ 'Curves and Surfaces',
+    Title == 'Designs for Living and Learning, Second Edition : Transforming Early Childhood Environments' ~ 'Designs for Living and Learning, Second Edition',
+    Title == 'Differential Geometry : Curves --- Surfaces --- Manifolds, Third Edition' ~ 'Differential Geometry: Manifolds, Curves, and Surfaces',
+    Title == 'Dome of the Hidden Pavilion : New Poems' ~ 'Dome of the Hidden Pavilion',
+    Title == 'Econometric Analysis of Cross Section and Panel Data, Second Edition' ~ 'Econometric Analysis of Cross Section and Panel Data, Second Edition',
+    Title == 'Engaged anthropology : politics beyond the text / Stuart Kirsch' ~ 'Engaged Anthropology',
+    Title == 'Fatal Invention : How Science, Politics, and Big Business Re-Create Race in the Twenty-First Century' ~ 'Fatal Invention',
+    Title == 'Financial Literacy for Managers : Finance and Accounting for Better Decision-Making' ~ 'Financial Literacy for Managers',
+    Title == 'Following Muhammad : Rethinking Islam in the Contemporary World' ~ 'Following Muhammad',
+    Title == 'Foreign Front : Third World Politics in Sixties West Germany' ~ 'Foreign Front',
+    Title == 'Freedom Farmers : Agricultural Resistance and the Black Freedom Movement' ~ 'Freedom Farmers',
+    Title == 'From the Tricontinental to the global South : race, radicalism, and transnational solidarity / Anne Garland Mahler' ~ 'From the Tricontinental to the Global South',
+    Title == 'How Journalists Engage: A Theory of Trust Building, Identities, & Care' ~ 'How Journalists Engage',
+    Title == 'How to Keep Your Cool : An Ancient Guide to Anger Management' ~ 'How to Keep Your Cool',
+    Title == 'Human Osteology' ~ 'Human Osteology',
+    Title == 'Human Rights and Social Justice in a Global Perspective: An Introduction to International Social Work' ~ 'Human Rights and Social Justice in a Global Perspective: An Introduction to International Social Work',
+    Title == 'Invasive Species: What Everyone Needs to Know' ~ 'Invasive Species',
+    Title == 'Keywords in Sound' ~ 'Keywords in Sound',
+    Title == "Madam C. J. Walker's Gospel of Giving : Black Women's Philanthropy During Jim Crow" ~ "Madam C. J. Walker's Gospel of Giving",
+    Title == 'Mobilizing Japanese youth : the Cold War and the making of the sixties generation / Christopher Gerteis' ~ 'Mobilizing Japanese Youth',
+    Title == 'Population Health : Concepts and Methods' ~ 'Population Health',
+    Title == 'Recreation Programming : Designing, Staging, and Managing the Delivery of Leisure Experiences' ~ 'Recreation Programming',
+    Title == 'Ships and Seamanship in the Ancient World' ~ 'Ships and Seamanship in the Ancient World',
+    Title == 'The Book of Margery Kempe' ~ 'The Book of Margery Kempe',
+    Title == 'The children of Solaga : indigenous belonging across the U.S.-Mexico border / Daina Sanchez' ~ 'The Children of Solaga',
+    Title == 'The Comprehensive Guide to Interdisciplinary Veterinary Social Work' ~ 'The Comprehensive Guide to Interdisciplinary Veterinary Social Work',
+    Title == 'The Ethical Executive : Becoming Aware of the Root Causes of Unethical Behavior: 45 Psychological Traps That Every One of Us Falls Prey To' ~ 'The Ethical Executive',
+    Title == 'The Female Man' ~ 'The Female Man',
+    Title == 'The House on Mango Street' ~ 'The House on Mango Street',
+    Title == 'The Private Memoirs and Confessions of a Justified Sinner' ~ 'The Private Memoirs and Confessions of a Justified Sinner',
+    Title == 'The Pursuit of Italy : A History of a Land, Its Regions, and Their Peoples' ~ 'The Pursit of Italy',
+    Title == 'The Tradition' ~ 'The Tradition',
+    Title == 'The Tragedy of Macbeth: the Oxford Shakespeare' ~ 'Macbeth',
+    Title == "Things They Carried - Tim O'Brien" ~ 'Things They Carried',
+    Title == 'Through the Arc of the Rain Forest' ~ 'Through the Arc of the Rain Forest',
+    Title == 'Unchained Voices : An Anthology of Black Authors in the English-Speaking World of the Eighteenth Century' ~ 'Unchained Voices',
+    Title == 'Unmentionables : textiles, garment work, and the Syrian American working class / Stacy D. Fahrenthold' ~ 'Unmentionables',
+    Title == 'Why people die by suicide / Thomas Joiner' ~ 'Why People Die by Suicide',
+    Title == 'Why War? : The Cultural Logic of Iraq, the Gulf War, and Suez' ~ 'Why War?',
+    Title == 'World religions in seven sentences : a small introduction to a vast topic / Douglas Groothuis' ~ 'World Religions in Seven Sentences: A Small Introduction to a Vast Topic',
+    Title == 'York Mystery Plays: A Selection in Modern Spelling' ~ 'York Mystery Plays',
+    
+    # Fall 2025
+    Title == '14-18 : Understanding the Great War' ~ '14-18',
+    Title == '58-IN-MIND : multilingual teaching strategies for diverse deaf students / edited by Debbie Golos, Marlon Kuntze, Kimberly Wolbers, Chris Kurz' ~ '58-IN-MIND',
+    Title == 'A Course in Mathematical Modeling' ~ 'A Course in Mathematical Modeling',
+    Title == 'A Guide to U. S. Environmental Law' ~ 'A Guide to U.S. Environmental Law',
+    Title == 'A hero of our time / Mikhail Lermontov ; translated by Vladimir Nabokov in collaboration with Dmitri Nabokov' ~ 'A Hero of our Time',
+    Title == 'A Primer of Drug Action : A Concise Nontechnical Guide to the Actions, Uses, and Side Effects of Psychoactive Drugs' ~ 'A Primer of Drug Action',
+    Title == 'African Slavery in Latin America and the Caribbean' ~ 'African Slavery in Latin America and the Caribbean',
+    Title == 'All in the family : the realignment of American democracy since the 1960s / Robert O. Self' ~ 'All in the Family',
+    Title == 'American Democracy in Peril' ~ 'American Democracy in Peril',
+    Title == 'An uneasy embrace : Africa, India and the spectre of race / Shobana Shankar' ~ 'An Uneasy Embrace',
+    Title == "Because of Sex : One Law, Ten Cases, and Fifty Years That Changed American Women's Lives at Work" ~ 'Because of Sex',
+    Title == 'Biomechanics of Movement : The Science of Sports, Robotics, and Rehabilitation' ~ 'Biomechanics of Movement',
+    Title == 'Building Small : A Toolkit for Real Estate Entrepreneurs, Civic Leaders, and Great Communities' ~ 'Building Small',
+    Title == 'Catalog of Unabashed Gratitude' ~ 'Catalog of Unabashed Gratitude',
+    Title == "Catiline's Conspiracy, the Jugurthine War, Histories" ~ "Catiline's Conspiracy",
+    Title == 'Collected Body' ~ 'Collected Body',
+    Title == 'Como água para Chocolate' ~ 'Como água para Chocolate',
+    Title == 'Copaganda : How Police and the Media Manipulate Our News' ~ 'Copaganda',
+    Title == 'Cultures of Piety : Medieval English Devotional Literature in Translation' ~ 'Cultures of Piety',
+    Title == 'Cuna de Gato' ~ 'Cuna de Gato',
+    Title == 'Death of Ivan Ilyich & other stories / Leon Tolstoi' ~ 'Death of Ivan Ilyich',
+    Title == 'Development As Freedom' ~ 'Development as Freedom',
+    Title == 'Educating Students with Severe and Multiple Disabilities : A Collaborative Approach, Fifth Edition' ~ 'Educating Students with Severe and Multiple Disabilities',
+    Title == 'Enviromedics: The Impact of Climate Change on Human Health' ~ 'Enviromedics',
+    Title == 'Environmental and Natural Resources Economics' ~ 'Environmental and Natural Resources Economics',
+    Title == 'Essentials of food science / Vickie A. Vaclavik, Elizabeth W. Christian, Tad Campbell' ~ 'Essentials of Food Science',
+    Title == 'Existentialism Is a Humanism' ~ 'Existentialism is a Humanism',
+    Title == 'Forging Global Fordism' ~ 'Forging Global Fordism',
+    Title == 'Gabriel García Márquez' ~ 'Gabriel García Márquez',
+    Title == 'Getting Real About Inequality : Intersectionality in Real Life' ~ 'Getting Real About Inequality',
+    Title == "Gods' Man: A Novel in Woodcuts" ~ "Gods' Man",
+    Title == 'Good-Bye to All That' ~ 'Good-Bye to All That',
+    Title == 'Great Short Stories by American Women' ~ 'Great Short Stories by American Women',
+    Title == "Guide to Jim Collins's Good to Great" ~ "Guide to Jim Collins's Good to Great",
+    Title == 'Harp of Burma' ~ 'Harp of Burma',
+    Title == 'Imperial Apocalypse : The Great War and the Destruction of the Russian Empire' ~ 'Imperial Apocalypse',
+    Title == 'Introducing Sociology: A Graphic Guide' ~ 'Introducing Sociology',
+    Title == 'James Henry Hammond and the Old South : a design for mastery / Drew Gilpin Faust' ~ 'James Henry Hammond and the Old South',
+    Title == "King of the North : Martin Luther King Jr. 's Life of Struggle Outside the South" ~ 'King of the North',
+    Title == 'La Casa de Mango Street' ~ 'La Casa de Mango Street',
+    Title == 'Leading with questions : how leaders discover powerful answers by knowing how and what to ask / Michael J. Marquardt and Bob Tiede' ~ 'Leading with Questions',
+    Title == 'Lincoln and the Triumph of the Nation : Constitutional Conflict in the American Civil War' ~ 'Lincoln and the Triumph of the Nation',
+    Title == 'Love of Worker Bees' ~ 'Love of Worker Bees',
+    Title == 'Manual NSCA : Fundamentos Del Entrenamiento Personal' ~ 'Manual NSCA',
+    Title == 'Merchants of Culture : The Publishing Business in the Twenty-First Century' ~ 'Merchants of Culture',
+    Title == 'Mere Christianity' ~ "C. S. Lewis's Mere Christianity",
+    Title == 'Motivational Interviewing in Nutrition and Fitness' ~ 'Motivational Interviewing in Nutrition and Fitness',
+    Title == 'Narrative of the Life of Frederick Douglass : An American Slave, Written by Himself' ~ 'Narrative of the Life of Frederick Douglass',
+    Title == "Njinga of Angola : Africa's Warrior Queen" ~ 'Njinga of Angola',
+    Title == 'Oil on Water: a Novel: A Novel' ~ 'Oil on Water',
+    Title == 'Panic at the Pump : The Energy Crisis and the Transformation of American Politics in The 1970s' ~ 'Panic at the Pump',
+    Title == 'Paradise' ~ 'Paradise', 
+    Title == 'Persuasion' ~ 'Persuasion',
+    Title == 'Planning for Play, Observation, and Learning in Preschool and Kindergarten' ~ 'Planning for Play, Obversation, and Learning in Preschool and Kindergarten',
+    Title == 'Reel Pleasures : Cinema Audiences and Entrepreneurs in Twentieth-Century Urban Tanzania' ~ 'Reel Pleasures',
+    Title == 'Religion in a changing workplace / Elaine Howard Ecklund, Denise Daniels, and Christopher P. Scheitle' ~ 'Religion in a Changing Workplace',
+    Title == 'Responsible Conduct of Research' ~ 'Responsible Conduct of Research',
+    Title == 'Return of the Soldier' ~ 'Return of the Soldier',
+    Title == 'Saltwater Slavery : A Middle Passage from Africa to American Diaspora' ~ 'Saltwater Slavery',
+    Title == "Siberian Exile: Blood, War, and a Granddaughter's Reckoning" ~ 'Siberian Exile',
+    Title == 'Silas Marner: The Weaver of Raveloe' ~ 'Silas Marner',
+    Title == 'Sir Gawain and the Green Knight' ~ 'Sir Gawain and the Green Knight',
+    Title == 'Speaking with Vampires : Rumor and History in Colonial Africa' ~ 'Speaking with Vampires',
+    Title == 'Story Proof: The Science Behind the Startling Power of Story' ~ 'Story Proof: The Science Behind the Startling Power of Story',
+    Title == 'Story Smart: Using the Science of Story to Persuade, Influence, Inspire, and Teach' ~ 'Story Smart',
+    Title == 'Successful Academic Writing: A Complete Guide for Social and Behavioral Scientists' ~ 'Successful Academic Writing',
+    Title == "Summary of Richard Thaler's Nudge: improving decisions about health, wealth, and happiness" ~ "Summary of Richard Thaler's Nudge",
+    Title == 'Sustainable Landscape Construction, Third Edition : A Guide to Green Building Outdoors' ~ 'Sustainable Landscape Construction, Third Edition',
+    Title == 'Teaching Music Theory : New Voices and Approaches' ~ 'Teaching Music Theory',
+    Title == 'The Chain : Farm, Factory, and the Fate of Our Food' ~ 'The Chain',
+    Title == 'The Cheese and the Worms : The Cosmos of a Sixteenth-Century Miller' ~ 'The Cheese and the Worms',
+    Title == 'The Chinese Must Go : Violence, Exclusion, and the Making of the Alien in America' ~ 'The Chinese Must Go',
+    Title == 'The Crucible' ~ 'The Crucible',
+    Title == 'The Elements of Style : The Original Edition' ~ 'The Elements of Style',
+    Title == 'The Future of an Illusion' ~ 'The Future of an Illusion',
+    Title == 'The gas mask in interwar Germany : visions of chemical modernity / Peter Thompson, Science History Institute, Philadelphia' ~ 'The Gas Mask in Interwar Germany',
+    Title == 'The Haunting of Hill House' ~ 'The Haunting of Hill House',
+    Title == 'The Oxford Handbook of Engineering and Technology in the Classical World' ~ 'The Oxford Handbook of Engineering and Technology in the Classical World',
+    Title == 'The Principles of Scientific Management' ~ 'The Principles of Scientific Management',
+    Title == 'The Song of the Earth' ~ 'The Song of the Earth',
+    Title == 'The Vanquished : Why the First World War Failed to End' ~ 'The Vanquished',
+    Title == 'The World of Mexican Migrants : The Rock and the Hard Place' ~ 'The World of Mexican Migrants',
+    Title == 'Totalitarianism : Part Three of the Origins of Totalitarianism' ~ 'Totalitarianism',
+    Title == 'Transport modeling for environmental engineers and scientists / Mark M. Clark' ~ 'Transport Modeling for Environmental Engineers and Scientists',
+    Title == 'Typee : A Peep at Polynesian Life' ~ 'Typee',
+    Title == 'Understanding Environmental Pollution' ~ 'Understanding Environmental Pollution',
+    Title == 'Using Statistical Methods in Social Science Research : With a Complete SPSS Guide' ~ 'Using Statstical Methods in Social Science Research',
+    Title == 'We' ~ 'We',
+    Title == 'What Noise Against the Cane' ~ 'What Noise Against the Cane',
+    Title == 'Why Civil Resistance Works : The Strategic Logic of Nonviolent Conflict' ~ 'Why Civil Resistance Works',
+    Title == "Why Kids Can't Read: Continuing to Challenge the Status Quo in Education" ~ "Why Kids Can't Read",
+    Title == 'Why We Lost the ERA' ~ 'Why we Lost the Era',
+    Title == 'Writing Science: How to Write Papers That Get Cited and Proposals That Get Funded' ~ 'Writing Science',
+    
+    # Spring 2026
+    Title == 'A Practical Guide to Commercial Real Estate Transactions : From Contract to Closing, Third Edition' ~ 'A Practical Guide to Commercial Real Estate Transactions: From Contract to Closing',
+    Title == 'A Short Course in Reading French' ~ 'A Short Course in Reading French',
+    Title == 'Affrilachia: Poems' ~ 'Affrilachia: Poems',
+    Title == 'After Victory : Institutions, Strategic Restraint, and the Rebuilding of Order after Major Wars / G. John Ikenberry' ~ 'After Victory',
+    Title == "American Democracy in Peril : Eight Challenges to America´s Future" ~ 'American Democracy In Peril : Eight Challenges To Americas Future',
+    Title == 'American Military Life in the 21st Century: Social, Cultural, and Economic Issues and Trends [2 Volumes]' ~ 'American Military Life in the 21st Century: Social, Cultural, and Economic Issues and Trends [2 Volumes]',
+    Title == 'An unkindness of ghosts / Rivers Solomon' ~ 'An Unkindness of Ghosts',
+    Title == 'Applied Artificial Intelligence in Business : Concepts and Cases' ~ 'Applied Artificial Intelligence in Business',
+    Title == 'Assessment in Counseling : Procedures and Practices' ~ 'Assessment in Counseling: Procedures and Practices',
+    Title == 'Cooperation and Conflict Between State and Local Government' ~ 'Cooperation and Conflict Between State and Local Government',
+    Title == 'Crack : Rock Cocaine, Street Capitalism, and the Decade of Greed' ~ 'Crack',
+    Title == 'Criminological Theory: An Analysis of Its Underlying Assumptions' ~ 'Criminological Theory',
+    Title == 'Debating Reform : Conflicting Perspectives on How to Fix the American Political System' ~ 'Debating Reform : Conflicting Perspectives on How to Fix the American Political System',
+    Title == 'Elegant Legal Writing' ~ 'Elegant Legal Writing',
+    Title == 'Elementary Number Theory' ~ 'Elementary Number Theory',
+    Title == 'Epidemiology by Design: A Causal Approach to the Health Sciences' ~ 'Epidemiology by Design',
+    Title == "Evelina : or, the history of a young lady's entrance into the world / Frances Burney" ~ "Evelina: Or the History of A Young Lady's Entrance into the World",
+    Title == 'Frankenstein' ~ 'Frankenstein',
+    Title == 'Fully Nonlinear Elliptic Equations' ~ 'Fully Nonlinear Elliptic Equations',
+    Title == 'Fundamentals of Physics II : Electromagnetism, Optics, and Quantum Mechanics' ~ 'Fundamentals of Physics II: Electromagnetism, Optics, and Quantum Mechanics',
+    Title == 'Gender and the Musical Canon' ~ 'Gender and the Musical Canon',
+    Title == 'Hablar español en Estados Unidos : la sociopolítica del lenguaje / Jennifer Leeman y Janet M. Fuller' ~ 'Hablar español en Estados Unidos',
+    Title == 'Herland' ~ 'Herland',
+    Title == 'Humble, Hungry, Smart: The Three Universal Traits of Great Team Players' ~ 'Humble, Hungry, Smart',
+    Title == 'International Trade and Agriculture : Theories and Practices' ~ 'International Trade and Agriculture',
+    Title == 'Introduction to American Deaf Culture' ~ 'Introduction to American Deaf Culture',
+    Title == 'Introduction to Probability Models' ~ 'Introduction to Probability Models',
+    Title == 'Introduction to Stochastic Processes' ~ 'Introduction to Stochastic Processes',
+    Title == 'Language, Truth and Logic' ~ 'Language, Truth and Logic',
+    Title == 'Linear Systems Theory : Second Edition' ~ 'Linear Systems Theory: Second Edition',
+    Title == 'Managing Hospitality Organizations' ~ 'Managing Hospitality Organizations',
+    Title == 'Obit' ~ 'Obit',
+    Title == 'Quicksand' ~ 'Quicksand',
+    Title == 'R for Political Science Research : An Introduction for Absolute Beginners' ~ 'R for Political Science Research',
+    Title == 'Race and Reunion : The Civil War in American Memory' ~ 'Race and Reunion',
+    Title == 'Recent Developments in Southeastern Archaeology : From Colonization to Complexity / David G. Anderson and Kenneth E. Sassaman' ~ 'Recent Developments in Southeastern Archaeology',
+    Title == 'Restoring Sanctuary : A New Operating System for Trauma-Informed Systems of Care' ~ 'Restoring Sanctuary',
+    Title == 'Rules of Play : Game Design Fundamentals' ~ 'Rules of Play: Game Design Fundamentals',
+    Title == 'Scraping By : Wage Labor, Slavery, and Survival in Early Baltimore' ~ 'Scraping By: Wage Labor, Slavery, and Survival in Early Baltimore',
+    Title == 'Social Work Values and Ethics' ~ 'Social Work Values and Ethics',
+    Title == 'Statistical Mechanics: Principles and Selected Applications' ~ 'Statistical Mechanics',
+    Title == 'Storming Heaven : A Novel' ~ 'Storming Heaven',
+    Title == 'Storytelling with you : plan, create, and deliver a stellar presentation / Cole Nussbaumer Knaflic ; illustrations by Catherine Madden' ~ 'Storytelling with You: Plan, Create, and Deliver a Stellar Presentation',
+    Title == 'Survey Research and Analysis' ~ 'Survey Research and Analysis',
+    Title == 'Teaching English As a Foreign or Second Language, Third Edition : A Self-Development and Methodology Guide' ~ 'Teaching English As a Foreign or Second Language, Third Edition',
+    Title == 'The Antinomian Controversy, 1636-1638 : A Documentary History' ~ 'The Antinomian Controversy, 1636-1638',
+    Title == 'The Basics of Public Budgeting and Financial Management: A Handbook for Academics and Practitioners' ~ 'Basics of Public Budgeting and Financial Management: A Handbook for Academics and Practitioners',
+    Title == 'The Dead' ~ 'The Dead',
+    Title == 'The Death of Ivan Ilyich' ~ 'The Death of Ivan Ilyich',
+    Title == 'The Great Arizona Orphan Abduction' ~ 'The Great Arizona Orphan Abduction',
+    Title == 'The Social Contract' ~ 'The Social Contract',
+    Title == 'The Student Leadership Challenge: Student Workbook and Leadership Journal' ~ 'The Student Leadership Challenge: Student Workbook and Leadership Journal',
+    Title == 'The Two Fundamental Problems of Ethics' ~ 'The Two Fundamental Problems of Ethics',
+    Title == 'The World Is a High Hill: Stories about Jamaican Women' ~ 'World Is A High Hill',
+    Title == 'Three Tales' ~ 'Three Tales',
+    Title == 'Time Series Econometrics : Learning Through Replication' ~ 'Time Series Econometrics',
+    Title == 'Trauma-Focused ACT' ~ "Trauma-Focused ACT: A Practitioner's Guide to Working with Mind, Body, and Emotion Using Acceptance and Commitment Therapy",
+    Title == 'Writing a Research Paper in Political Science : A Practical Guide to Inquiry, Structure, and Methods' ~ 'Writing a Research Paper in Political Science',
+      
+      
+    # Summer 2026  
+    Title == 'Controversies in Contemporary Advertising' ~ 'Controversies in Contemporary Advertising',
+    .default = 'Title Not Cleaned Properly'
+  )
+) |>
+  select(CleanTitle, Semester, `Total cost`)
+
+cleanTextbookOrders
+```
+
+
+
+# Join the Cost to the Usage
+
+```{r}
+colnames(filteredCosts) <- c('Title', 'Semester', 'Library Cost')
+colnames(cleanTextbookOrders) <- c('Title', 'Semester', 'Library Cost')
+
+allCosts <- rbind(filteredCosts, cleanTextbookOrders) |>
+  group_by(Title, Semester) |>
+  summarise(`Library Cost` = sum(`Library Cost`))
+
+allCosts
+```
+
+
+
+
+
+```{r}
+usageCost <- left_join(bookstoreTitleUsage, allCosts, by = c('UsageTitle' = 'Title', 'Semester' = 'Semester')) |>
+  mutate(costUse = ifelse(is.na(`Library Cost`) == TRUE, NA, round(`Library Cost` / Total_Usage, 2)),
+         boughtAtTime = ifelse(is.na(`Library Cost`) == TRUE, 'No', 'Yes'))
+
+usageCost
+```
+
+
+
+# VolBooks Financial Savings Tracking
+
+
+## Load Data
+
+FOR EACH SEMESTER, if this data is provided, copy the code chunk for a semester and add it in.
+
+
+```{r}
+savingsFall25 <- read_excel('Fall 2025 Library Savings for VolBooks.xlsx') |>
+  mutate(Semester = 'Fall 2025') |>
+  filter(Savings < 60000) #This removes a total row from the savings data
+savingsSpring26 <- read_excel('Spring 2026 Library Savings for VolBooks.xlsx') |>
+  mutate(Semester = 'Spring 2026') |>
+  filter(Savings < 221430) #Same removal of the total row
+
+allSavings <- rbind(savingsFall25, savingsSpring26) |>
+  mutate(`Total Students Active/Participating` = as.numeric(`Total Students Active/Participating`))
+
+allSavings
+```
+
+
+```{r}
+write_xlsx(allSavings, 'Raw Savings.xlsx')
+```
+
+
+# Get Amount Saved by Semester
+
+
+```{r}
+semesterSavings <- allSavings |>
+  group_by(Semester) |>
+  summarise(TotalSavings = sum(Savings)
+            )
+
+allTracking <- left_join(joinC, semesterSavings, by = 'Semester')
+
+allTracking
+```
+
+
+
+# Export the Semester Tracking File
+
+```{r}
+write_xlsx(allTracking, 'VolBooks Textbook Tracking by Semester.xlsx')
+```
+
+
+
+
+
+## Clean up Titles
+
+FOR EACH SEMESTER, Line up the titles being provided to the usage titles in bookstoreListShort. 
+
+
+```{r}
+cleanSavings <- allSavings |>
+  mutate(SavingsTitle = case_when(
+    Title == '58-IN-MIND: MULTILINGUAL TEACHING STRATEGIES FOR DIVERSE DEAF STUDENTS' ~ '58-IN-MIND',
+    Title == 'A Field Guide to Grad School' ~ 'A Field Guide to Grad School',
+    Title == 'A COURSE IN ENUMERATION PROBABILITY, A GRADUATE COURSE' ~ 'A Course in Enumeration Probability, a Graduate Course',    
+    Title == 'A COURSE IN MATHEMATICAL MODELINGb' ~ 'A Course in Mathematical Modeling',
+    Title == 'A Field Guide to Grad School' ~ 'A Field Guide to Grad School',
+    Title == 'A SHORT COURSE IN READING FRENCH' ~ 'A Short Course in Reading French',   
+    Title == 'ACADEMY OF NUTRITION AND DIETETICS POCKET GUIDE TO NUTRITION ASSESSMENT' ~ 'Academy of Nutrition & Dietetics Pocket Guide to Nutrition Assessment',   
+    Title == 'ACT Made Simple' ~ 'ACT Made Simple',
+    Title == 'AFFRILACHIA' ~ 'Affrilachia: Poems',
+    Title == 'AFRICAN SLAVERY IN LATIN AMERICA & THE CARIBBEAN' ~ 'African Slavery in Latin America and the Caribbean',
+    Title == 'ALWAYS GET THE NAME OF THE DOG' ~ 'Always Get The Name Of The Dog : A Guide To Media Interviewing',
+    Title == 'AMERICAN DEMOCRACY IN PERIL' ~ 'American Democracy In Peril : Eight Challenges To Americas Future',
+    Title == 'American Military Life in the 21st Century : Social, Cultural, and Economic Issues and Trends [2 Volumes]' ~ 'American Military Life in the 21st Century: Social, Cultural, and Economic Issues and Trends [2 Volumes]',
+    Title == 'AN INTRO TO SCIENTIFIC COMPUTING' ~ 'An Introduction to Scientific Computing',    
+    Title == 'AN UNKINDNESS OF GHOSTS' ~ 'An Unkindness of Ghosts',
+    Title == 'APPEALS IN MODERN RHETORIC' ~ 'Appeals in Modern Rhetoric',
+    Title == 'APPLIED ARTIFICIAL INTELLIGENCE IN BUSINESS' ~ 'Applied Artificial Intelligence in Business',
+    Title == 'ASSESSMENT IN COUNSELING' ~ 'Assessment in Counseling: Procedures and Practices',    
+    Title == 'ASSESSMENT IN STUDENT AFFAIRS' ~ 'Assessment in Student Affairs',
+    Title == 'BIOMATERIALS SCIENCE: AN INTRODUCTION TO MATERIALS IN MEDICINE' ~ 'Biomaterials Science',
+    Title == 'BIOMECHANICS OF MOVEMENT: THE SCIENCE OF SPORTS, ROBOTICS, AND REHABILITATION' ~ 'Biomechanics of Movement',
+    Title == 'BIOMECHANICS OF MOVEMENT' ~ 'Biomechanics of Movement',
+    Title == 'BRAIDING SWEETGRASS: INDIGENOUS WISDOM, SCIENTIFIC KNOWLEDGE AND THE TEACHINGS OF PLANTS' ~ 'Braiding Sweetgrass',    
+    Title == 'BUILDING SMALL: A TOOLKIT FOR REAL ESTATE ENTREPRENEURS, CIVIC LEADERS, AND GREAT COMMUNITIES' ~ 'Building Small', 
+    Title == 'BUILDING THE AMERICAN REPUBLIC, VOLUME 2' ~ 'Building The American Republic, Volume 2 : A Narrative History From 1877',
+    Title == 'CASE STUDIES IN DEAF EDUCATION' ~ 'Case Studies in Deaf Education',    
+    Title == 'CATALOG OF UNBASHED GRATITUDE' ~ 'Catalog of Unabashed Gratitude',
+    Title == 'COMPUTER ORGANIZATION AND DESIGN ARM EDITION' ~ 'Computer Organization And Design Arm Edition : The Hardware Software Interface',
+    Title == 'Concise Guide to Child and Adolescent Psychiatry' ~ 'Concise Guide to Child and Adolescent Psychiatry',
+    Title == 'CONCISE GUIDE TO CHILD AND ADOLESCENT PSYCHIATRY' ~ 'Concise Guide to Child and Adolescent Psychiatry',
+    Title == 'CONDENSED MATTER PHYSICS' ~ 'Condensed Matter Physics, Second Edition',
+    Title == 'CONFLICT RESOLUTION FOR THE HELPING PROFESSIONS' ~ 'Conflict Resolution for the Helping Professions',
+    Title == 'Core Values in School Librarianship' ~ 'Core Values in School Librarianship',
+    Title == 'Crack : Rock Cocaine, Street Capitalism, and the Decade of Greed' ~ 'Crack',
+    Title == 'CRACKED NOT BROKEN' ~ 'Cracked, Not Broken',
+    Title == 'Deaf Culture: Exploring Deaf Communities in the United States' ~ 'Deaf Culture',
+    Title == 'DEAF PEOPLE AND SOCIETY' ~ 'Deaf People and Society',
+    Title == 'DEBATING REFORM' ~ 'Debating Reform : Conflicting Perspectives on How to Fix the American Political System',
+    Title == 'DEFI AND THE FUTURE OF FINANCE' ~ 'DeFi and the Future of Finance',
+    Title == 'DEMAND AND SUPPLY INTEGRATION' ~ 'Demand and Supply Integration',
+    Title == 'DIFFERENTIAL GEOMETRY' ~ 'Differential Geometry: Manifolds, Curves, and Surfaces',
+    Title == 'DUST BOWLS OF EMPIRE: IMPERIALISM, ENVIRONMENTAL POLITICS, AND THE INJUSTICE OF' ~ 'Dust Bowls of Empire',
+    Title == 'ENVIROMEDICS: THE IMPACT OF CLIMATE CHANGE ON HUMAN HEALTH' ~ 'Enviromedics',
+    Title == 'ESSENTIALS OF ASSESSMENT REPORT WRITING' ~ 'Essentials of Assessment Report Writing',
+    Title == 'ESSENTIALS OF FOOD SCIENCE' ~ 'Essentials of Food Science',
+    Title == 'EVELINA' ~ "Evelina: Or the History of A Young Lady's Entrance into the World",
+    Title == 'Exactly How to Sell: The Sales Guide for Non-Sales Professionals' ~ 'Exactly How to Sell',
+    Title == 'FIGHTING AGAINST INJUSTICE OF STATE' ~ 'Fighting Against the Injustice of the State and Globalization',
+    Title == 'FINANCE FOR REAL ESTATE DEVELOPMENT' ~ 'Finance for Real Estate Development',
+    Title == 'FINANCIAL LITERACY FOR MANAGERS' ~ 'Financial Literacy for Managers',
+    Title == 'FISHING THROUGH THE APOCALYPSE' ~ 'Fishing Through the Apocalypse',
+    Title == 'FOREST MANAGEMENT AND PLANNING' ~ 'Forest Management and Planning',
+    Title == 'FUNDAMENTALS OF PHYSICS II' ~ 'Fundamentals of Physics II: Electromagnetism, Optics, and Quantum Mechanics',
+    Title == 'GENDER AND THE MUSICAL CANON' ~ 'Gender and the Musical Canon',
+    Title == 'GENKI: An Integrated Course in Elementary Japanese 1 [3rd Edition] Workbook' ~ 'GENKI: An Integrated Course in Elementary Japanese Ⅰ　WORKBOOK THIRD EDITION 初級日本語 げんきⅠ ワークブック　 第3版',
+    Title == 'GETTING REAL ABOUT INEQUALITY' ~ 'Getting Real About Inequality: Intersectionality in Real Life',
+    Title == 'Global Health Law & Policy' ~ 'Global Health Law and Policy',
+    Title == 'GLOBAL WRITING FOR PUBLIC RELATIONS' ~ 'Global Writing For Public Relations : Connecting In English With Stakeholders And Publics Worldwide',
+    Title == 'GLOBALIZATION OF EDUCATION' ~ 'Globalization of Education',
+    Title == 'GOVERNMENT AND POLITICS IN TENNESSEE' ~ 'Government and Politics in Tennessee',
+    Title == 'HABLAR ESPANOL EN ESTADOS UNIDOS : LA SOCIOPOLITICA DEL LENGUAJE' ~ 'Hablar español en Estados Unidos',
+    Title == 'HANDBOOK F/CLASSICAL RESEARCH' ~ 'Handbook for Classical Research',
+    Title == 'HOW TO KEEP YOUR COOL' ~ 'How to Keep Your Cool',
+    Title == 'HUMAN OSTEOLOGY 3RD ED W/LIFETIEM ACCESS' ~ 'Human Osteology',
+    Title == 'HUMAN RIGHTS AND SOCIAL JUSTICE IN A GLOBAL PERSPECTIVE' ~ 'Human Rights and Social Justice in a Global Perspective: An Introduction to International Social Work',
+    Title == 'INFORMATION SCIENCE' ~ 'Information Science : The Basics',
+    Title == 'INTERNATIONAL TRADE AND AGRICULTURE' ~ 'International Trade and Agriculture',
+    Title == 'INTRODUCTION TO AMERICAN DEAF CULTURE' ~ 'Introduction to American Deaf Culture',
+    Title == 'INTRODUCTION TO APPLIED NONLINEAR DYNAMICAL SYSTEMS AND CHAOS' ~ 'Introduction to Applied Nonlinear Dynamical Systems and Chaos',
+    Title == 'INTRODUCTION TO INDUSTRIAL ORGANIZATION, SECOND EDITION' ~ 'Introduction to Industrial Organization, Second Edition',
+    Title == 'INTRODUCTION TO PARTIAL DIFFERENTIAL EQUATIONS' ~ 'Introduction to Partial Differential Equations',
+    Title == 'INTRODUCTION TO STOCHASTIC PROCESSES' ~ 'Introduction to Stochastic Processes',
+    Title == 'JUST PRACTICE: A SOCIAL JUSTICE APPROACH TO SOCIAL WORK' ~ 'Just Practice: A Social Justice Approach to Social Work',
+    Title == 'LANGUAGE, TRUTH AND LOGIC' ~ 'Language, Truth and Logic',
+    Title == 'LEADING WITH QUESTIONS' ~ 'Leading with Questions: How Leaders Discover Powerful Answers by Knowing How and What to Ask',
+    Title == 'Lincoln and the Triumph of the Nation' ~ 'Lincoln and the Triumph of the Nation',
+    Title == 'LINGUISTICS OF ASL' ~ 'Linguistics of American Sign Language, 5th Ed.',
+    Title == 'MAKING AND TINKERING WITH STEM: SOLVING DESIGN CHALLENGES WITH YOUNG CHILDREN' ~ 'Making and Tinkering with STEM',
+    Title == 'MAKING RACE AND NATION' ~ 'Making Race and Nation',
+    Title == 'MASTERING QGIS' ~ 'Mastering QGIS - Second Edition',
+    Title == 'MASTERING QGIS - SECOND EDITION' ~ 'Mastering QGIS - Second Edition',
+    Title == 'Mathematical Methods for Physicists' ~ 'Mathematical Methods for Physicists (Seventh Edition)',
+    Title == 'MAXIMIZING THE IMPACT OF COMICS IN YOUR LIBRARY' ~ 'Maximizing the Impact of Comics in Your Library: Graphic Novels, Manga, and More',
+    Title == 'METALS AND SOCIETY' ~ 'Metals and Society',
+    Title == 'MILK AND FILTH' ~ 'Milk and Filth',
+    Title == 'MODULAR FORMS: A CLASSICAL/COMPUTATIONAL INTRO' ~ 'Modular Forms: A Classical And Computational Introduction',
+    Title == "MY GRANDMOTHER'S HANDS" ~ "My Grandmother's Hands: Racialized Trauma and the Pathway to Mending our Hearts and Bodies",
+    Title == "ORTNER'S IDENTIFICATION OF PATHOLOGICAL CONDITIONS" ~ "Ortner's Identification of Pathological Conditions in Human Skeletal Remains",
+    Title == 'Paradise: By the winner of the Nobel Prize in Literature 2021' ~ 'Paradise',
+    Title == 'PEDAGOGY OF OPPRESSED' ~ 'Pedagogy of the Oppressed',
+    Title == 'Phases of Terrorism in the Age of Globalization' ~ 'Phases of Terrorism in the Age of Globalization',
+    Title == 'PLANNING FOR PLAY, OBSERVATION, AND LEARNING IN PRESCHOOL AND KINDERGARTEN' ~ 'Planning for Play, Observation, and Learning in Preschool and Kindergarten',
+    Title == 'POLITICAL STYLE: THE ARTISTRY OF POWER' ~ 'Political Style',
+    Title == 'Power' ~ 'POWER',
+    Title == 'PRACTICAL GUIDE TO COMMERCIAL REAL ESTATE TRANSACTIONS' ~ 'A Practical Guide to Commercial Real Estate Transactions: From Contract to Closing',
+    Title == 'PROBABILITY, A GRADUATE COURSE' ~ 'Probability: A Graduate Course',
+    Title == 'PUBLIC SPEAKING FOR ENGINEERS' ~ 'Public Speaking for Engineers: Communicating Effectively with Clients, the Public, and Local Government',
+    Title == 'R for Political Science Research' ~ 'R for Political Science Research',
+    Title == 'RACE AND REUNION' ~ 'Race and Reunion',
+    Title == 'RACIAL THEORIES IN SOCIAL SCIENCE' ~ 'Racial Theories in Social Science: A Systemic Racism Critique',
+    Title == 'RECENT DEVELOPMENT IN SOUTHEASTERN ARCH' ~ 'Recent Developments in Southeastern Archaeology',
+    Title == 'REGRESSION ANALYSIS' ~ 'Regression Analysis and Linear Models',
+    Title == 'Religion in a Changing Workplace' ~ 'Religion in a Changing Workplace',
+    Title == 'RESEARCH METHODS FOR SOCIAL WORK' ~ 'Research Methods For Social Work : A Problem-Based Approach',
+    Title == 'RESPONSIBLE CONDUCT OF RESEARCH' ~ 'Responsible Conduct of Research',
+    Title == 'RULES OF PLAY' ~ 'Rules of Play: Game Design Fundamentals',
+    Title == 'SCIENCE NOTEBOOKS IN STUDENT-CENTERED CLASSROOMS' ~ 'Science Notebooks in Student-Centered Classrooms',
+    Title == 'SCRAPING BY' ~ 'Scraping By: Wage Labor, Slavery, and Survival in Early Baltimore',
+    Title == 'SILAS MARNER' ~ 'Silas Marner: The Weaver of Raveloe',
+    Title == 'SKILL AQUISITION IN SPORT' ~ 'Skill Acquisition in Sport',
+    Title == 'SOCIAL MOVEMENTS' ~ 'Social Movements: The Structure of Collective Mobilization',
+    Title == 'SOCIAL THEORY OF INERNATIONAL POLITICS' ~ 'Social Theory of International Politics',
+    Title == 'Social Work Values and Ethics' ~ 'Social Work Values and Ethics',
+    Title == 'SOCRATIC QUESTIONING FOR THERAPISTS AND COUNSELORS' ~ 'Socratic Questioning for Therapists and Counselors',
+    Title == 'SOUNDING LIKE A NO-NO'~ 'Sounding Like a No-No',
+    Title == 'Speech to Print' ~ 'Speech to Print',
+    Title == "STOELTING'S PHARMACOLOGY AND PHYSIOLOGY IN ANESTHETIC PRACTICE" ~ "Stoelting's Pharmacology and Physiology in Anesthetic Practice",
+    Title == 'Story Proof' ~ 'Story Proof: The Science Behind the Startling Power of Story',
+    Title == 'STORYTELLING WITH DATA' ~ 'Storytelling with Data',
+    Title == 'STORYTELLING WITH YOU' ~ 'Storytelling with You: Plan, Create, and Deliver a Stellar Presentation',
+    Title == 'STRANGE AS THIS WEATHER HAS BEEN: A NOVEL' ~ 'Strange As This Weather Has Been',
+    Title == 'STRATEGY IN 3D' ~ 'Strategy in 3D',
+    Title == 'SUN ALSO RISES' ~ 'The Sun Also Rises',
+    Title == 'SUPPLY CHAIN PLANNING AND ANALYTICS' ~ 'Supply Chain Planning and Analytics',
+    Title == 'SURVEY RESEARCH AND ANALYSIS' ~ 'Survey Research and Analysis',
+    Title == 'SYSTEMATIC INSTRUCTION FOR STUDENTS WITH MODERATE AND SEVERE DISABILITIES' ~ 'Systematic Instruction for Students with Moderate and Severe Disabilities',
+    Title == 'SYSTEMATIC INSTRUCTION FOR STUDENTS WITH MODERATE TO SEVER DISABILITIES' ~ 'Systematic Instruction for Students with Moderate and Severe Disabilities',
+    Title == 'Systems Thinking For Social Change' ~ 'Systems Thinking For Social Change: A Practical Guide To Solving Complex Problems, Avoiding Unintended Consequences, And Achieving Lasting Results',
+    Title == 'TEACHING AND LEARNING STEM' ~ 'Teaching and Learning STEM',
+    Title == 'TEACHING ENGLISH AS A FOREIGN LANGUAGE' ~ 'Teaching English As a Foreign or Second Language, Third Edition',
+    Title == 'Teaching English as a Foreign or Second Language' ~ 'Teaching English As a Foreign or Second Language, Third Edition',
+    Title == "TEACHING STRINGS IN TODAY'S CLASSROOM" ~ "Teaching Strings In Today's Classroom : A Guide For Group Instruction",
+    Title == 'THE ANTINOMIAN CONTROVERSY' ~ 'The Antinomian Controversy, 1636-1638',
+    Title == 'THE ART OF THE PITCH' ~ 'The Art of the Pitch',
+    Title == 'The Basics of Public Budgeting and Financial Management' ~ 'Basics of Public Budgeting and Financial Management: A Handbook for Academics and Practitioners',
+    Title == 'THE BEAST WITHIN' ~ 'The Beast Within : Animals In The Middle Ages',
+    Title == 'THE BUDDHIST WORLD OF SOUTHEAST ASIA' ~ 'The Buddhist World of Southeast Asia',
+    Title == 'The Comprehensive Guide to Interdisciplinary Veterinary Social Work' ~ 'The Comprehensive Guide to Interdisciplinary Veterinary Social Work',
+    Title == 'THE COMPREHENSIVE GUIDE TO INTERDISCIPLINARY VETERINARY SOCIAL WORK' ~ 'The Comprehensive Guide to Interdisciplinary Veterinary Social Work',
+    Title == 'THE FASCINATING WORLD OF GRAPH THEORY' ~ 'The Fascinating World of Graph Theory',
+    Title == 'THE HISTORY OF THE AMERICAN MUSICAL THEATRE' ~ 'A History Of The American Musical Theatre',
+    Title == 'THE IDEAL TEAM PLAYER' ~ 'The Ideal Team Player: How to Recognize and Cultivate the Three Essential Virtues',
+    Title == 'THE LIFE OF SAINT KATHERINE OF ALEXANDRIA' ~ 'The Life of Saint Katherine of Alexandria',
+    Title == 'THE MITKI AND THE ART OF POSTMODERN PROTEST IN RUSSIA' ~ 'The Mitki and the Art of Postmodern Protest in Russia',
+    Title == 'THE MUSEUM OF UNNATURAL HISTORIES' ~ 'The Museum of Unnatural Histories',
+    Title == 'THE NEW JIM CROW: MASS INCARCERATION IN THE AGE OF COLORBLINDNESS' ~ 'The New Jim Crow',
+    Title == 'THE STUDENT LEADERSHIP CHALLENGE' ~ 'The Student Leadership Challenge: Student Workbook and Leadership Journal',
+    Title == 'THE TROJANS AND THEIR NEIGHBOURS' ~ 'The Trojans and Their Neighbours',
+    Title == 'THE TWO FUNDAMENTAL PROBLEMS OF ETHICS' ~ 'The Two Fundamental Problems of Ethics',
+    Title == 'THE WOLD IS A HIGH HILL' ~ 'World is a High Hill',
+    Title == 'THE WORLD OF MEXICAN MIGRANTS: THE ROCK AND THE HARD PLACE' ~ 'The World of Mexican Migrants',
+    Title == 'THROUGH THE ARC OF THE RAIN FOREST' ~ 'Through the Arc of the Rain Forest',
+    Title == 'TIME SERIES ECONOMETRICS: LEARNING THROUGH REPLICATION' ~ 'Time Series Econometrics',
+    Title == 'Transport Modeling for Environmental Engineers and Scientists' ~ 'Transport Modeling for Environmental Engineers and Scientists',
+    Title == 'TRAUMA-FOCUSED ACT' ~ "Trauma-Focused ACT: A Practitioner's Guide to Working with Mind, Body, and Emotion Using Acceptance and Commitment Therapy",
+    Title == 'UNIVERSITY PHYSICS VOLUME 3' ~ 'University Physics: Volume 3',
+    Title == 'WATER 4.0' ~ 'Water 4. 0',
+    Title == 'WHAT REALLY WORKS WITH EXCEPTIONAL LEARNERS' ~ 'What Really Works with Exceptional Learners',
+    Title == "WHERE'S THE MATH?: BOOKS, GAMES, AND ROUTINES TO SPARK CHILDREN'S THINKING" ~ "Where's the Math?",
+    Title == 'WHY PEOPLE DIE BY SUICIDE' ~ 'Why People Die by Suicide',
+    Title == 'WORLD RELIGIONS IN SEVEN SENTENCES' ~ 'World Religions in Seven Sentences: A Small Introduction to a Vast Topic',
+    Title == 'YAGUARETE WHITE' ~ 'Yaguareté White',
+    Title == 'ZAMI: A NEW SPELLING OF MY NAME' ~ 'Zami',
+    
+    
+    .default = str_to_title(Title)
+  ))  |>
+  group_by(SavingsTitle, Semester) |>
+  summarise(CoursesUsed = n(),
+            BookPrice = mean(`Net Price`),
+            StudentsParticipating = sum(`Total Students Active/Participating`),
+            Savings = sum(Savings))
+
+cleanSavings
+
+```
+
+
+```{r}
+write_xlsx(cleanSavings, 'Savings Check.xlsx')
+```
+
+
+
+## Join to Usage and Cost
+
+
+```{r}
+usageCostSavings <- left_join(usageCost, cleanSavings, by = c('UsageTitle' = 'SavingsTitle', 'Semester' = 'Semester')) |>
+  mutate(Has_Savings = ifelse(is.na(Savings) == FALSE, 'Yes', 'No'))
+
+usageCostSavings
+```
+
+
+
+
+## Export Full Title Level Information
+
+
+
+```{r}
+write_xlsx(usageCostSavings, 'Usage Cost and Savings of VolBooks Titles.xlsx')
+```
+
+
+
+
+NEXT STEPS:
+
+
+
+
+* Looking to update the VolBooks PowerBI dashboard?
+
+Go to the locally saved PowerBI file and refresh the data sources. Make sure to check to make sure all title matching lines up properly.
+
+
+* Need to add more usage data?
+
+Check the APCS SharePoint for the Usage Master Vendor List to see how to access the needed usage.
+
+
+* Looking to add more semesters of data?
+
+Gather the files and clean up the data as mentioned in each code chunk above.
+
+
+* Looking to create a report for VolBooks?
+
+The PowerBI dashboard should have the visuals you'll need to insert into your report. If you are looking for visuals made here in R instead, see the code below for some potential ideas and places to start.
+
+
+
+
+
+
+
+
+
+
+
+
+
+The below code is only needed if making a report using R visuals and not the PowerBI report.
+
+
+# Clean up the Data for the Final Report
+
+
+
+## Create GT Table for Total Cost
+
+
+```{r}
+costUseTable <- data.frame(
+  Titles = dim(usageCost)[1],
+  Titles_Bought = sum(ifelse(is.na(usageCost$`Transaction Expenditure Amount`) == FALSE, 1, 0)),
+  Amount_Spent = sum(ifelse(is.na(usageCost$`Transaction Expenditure Amount`) == FALSE, usageCost$`Transaction Expenditure Amount`, 0))
+) |>
+  mutate(Amount_Spent = substr(paste('$', formatC(Amount_Spent, big.mark = ',', format = 'f')), 1, 10))
+
+costUseTable
+```
+
+
+```{r}
+costGT <- costUseTable |>
+  gt() |>
+  tab_header(title = md('**Fall 2025 Textbook Cost Overview**')) |>
+  cols_align(align = 'center', columns = c('Titles', 'Titles_Bought', 'Amount_Spent')) |>
+  opt_stylize(style = 5, color = 'green') |>
+  cols_label(Titles = 'Unique Titles', Titles_Bought = 'Titles Bought in Fall 2025', Amount_Spent = '$ Spent in Fall 2025') |>
+  cols_width(everything() ~ px(200)) |>
+  opt_table_font(
+    font = 'rounded-sans',
+    size = 16
+  )
+
+costGT
+```
+
+
+
+# Get Usage and Cost Per Use Numbers
+
+
+```{r}
+newPurchase <- usageCost |>
+  filter(is.na(`Transaction Expenditure Amount`) == FALSE)
+
+newPurchaseUse <- sum(newPurchase$Total_Usage)
+
+newPurchaseCostUse <- round(sum(newPurchase$`Transaction Expenditure Amount`) / (2 * newPurchaseUse), 2)
+
+allUsage <- sum(usageCost$Total_Usage)
+```
+
+
+
+```{r}
+costUseDF <- data.frame(
+  Total_Cost = sum(ifelse(is.na(usageCost$`Transaction Expenditure Amount`) == FALSE, usageCost$`Transaction Expenditure Amount`, 0)),
+  New_Purchase_Use = newPurchaseUse,
+  New_Purchase_Cost_Use = newPurchaseCostUse
+) |>
+  mutate(New_Purchase_Cost_Use = substr(paste('$', formatC(New_Purchase_Cost_Use, big.mark = ',', format = 'f')), 1, 6),
+         Total_Cost = substr(paste('$', formatC(Total_Cost, big.mark = ',', format = 'f')), 1, 10))
+
+costUseDF
+```
+
+
+```{r}
+usageGT <- costUseDF |>
+  gt() |>
+  tab_header(title = md('**Fall 2025 Textbook Cost Per Use for New Titles**')) |>
+  cols_align(align = 'center', columns = c('Total_Cost', 'New_Purchase_Use', 'New_Purchase_Cost_Use')) |>
+  opt_stylize(style = 5, color = 'green') |>
+  cols_label(Total_Cost = 'Fall 2025 Cost', New_Purchase_Use = 'Newly Bought Book Usage', New_Purchase_Cost_Use = 'Cost Per Use') |>
+  cols_width(everything() ~ px(200)) |>
+  opt_table_font(
+    font = 'rounded-sans',
+    size = 16
+  )
+
+usageGT
+```
+
+
+
+
+
+
+## Bucket Titles
+
+
+```{r}
+bookstoreBuckets <- usageCost |>
+  mutate(usageBucket = case_when(
+    is.na(Total_Usage) == TRUE | Total_Usage == 0 ~ 'None',
+    Total_Usage <= 10 & Total_Usage > 0 & is.na(Total_Usage) == FALSE ~ 'Low (1-10)',
+    (Total_Usage > 10 & Total_Usage <= 100) & is.na(Total_Usage) == FALSE ~ 'Mid (11-100)',
+    Total_Usage > 100 & is.na(Total_Usage) == FALSE ~ 'High (100+)'
+  ))
+
+bookstoreBuckets$usageBucket <- factor(bookstoreBuckets$usageBucket, levels = c('High (100+)', 'Mid (11-100)', 'Low (1-10)', 'None'))
+
+bookCounts <- bookstoreBuckets |>
+  group_by(usageBucket) |>
+  summarise(n = n())
+
+bookCounts
+```
+
+## Create Pie Chart
+
+
+```{r}
+ggplot(bookCounts, aes(x = '', y = n, fill = usageBucket)) +
+  geom_col() +
+  coord_polar(theta = "y") +
+  geom_label(aes(label = n),
+             color = 'white',
+             position = position_stack(vjust = 0.4),
+             show.legend = FALSE) +
+  scale_fill_manual(values = c('#117733', '#ddcc77', '#ed7117', '#882255')) +
+  theme(axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        axis.title = element_blank(),
+        panel.grid = element_blank(),
+        panel.background = element_rect(fill = "#ffffff"),
+        plot.background = element_rect(fill = "#ffffff"),
+        legend.background = element_rect(fill = "#ffffff")) +
+  ggtitle('Textbook Usage by Bucket Fall 2025') +
+  guides(fill = guide_legend(title = '# of Uses'))
+
+ggsave('Textbook Usage by Bucket Fall 2025.png', width = 6, height = 6, units = 'in', dpi = 300)
+```
+
+
+
+# Usage of the Top Used Books
+
+
+```{r}
+topUse <- usageCost |>
+  filter(Total_Usage > 100) |>
+  arrange(desc(Total_Usage)) |>
+  mutate(Title = ifelse(Title == 'GENKI: An Integrated Course in Elementary Japanese Ⅰ　WORKBOOK THIRD EDITION 初級日本語 げんきⅠ ワークブック　 第3版',  ' GENKI: An Integrated Course in Elementary Japanese WORKBOOK THIRD EDITION', Title))
+
+topUse
+```
+
+
+
+# Create Bar Chart
+
+
+```{r}
+ggplot(topUse, aes(x = reorder(Title, Total_Usage), y = Total_Usage)) +
+  geom_bar(position = 'dodge', stat = 'identity', fill = '#ff8200') +
+  scale_fill_brewer(palette = 'Set1') +
+  coord_flip() +
+  labs(x = 'Title', y = 'Requests', title = 'Highly Used Textbooks in Fall 2025') +
+  geom_text(aes(label = Total_Usage), hjust = 1, size = 10, color = '#ffffff') +
+  theme(plot.title = element_text(size = 24,
+                                  color = '#4b4b4b',
+                                  face = 'bold')) +
+  theme(legend.text = element_text(size = 12,
+                                   color = '#4b4b4b',
+                                   face = 'bold')) +
+  theme(axis.title.x = element_text(size = 18,
+                                    color = '#4b4b4b',
+                                    face = 'bold')) +
+  theme(axis.title.y = element_text(size = 18,
+                                    color = '#4b4b4b',
+                                    face = 'bold')) +
+  theme(axis.text.x = element_text(color = '#4b4b4b',
+                                   face = 'bold',
+                                   angle = 90,
+                                   size = 14)) +
+  theme(axis.text.y = element_text(color = '#4b4b4b',
+                                   face = 'bold',
+                                   size = 14)) +
+  theme(legend.title = element_blank()) +
+  theme(plot.caption = element_text(size = 10,
+                                    color = '#4b4b4b')) +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 30))
+
+ggsave('Highly Used Textbooks in Fall 2025.png', width = 18, height = 12, units = 'in', dpi = 300)
+```
+
+
+
+# Find Cost/Use for Titles
+
+
+```{r}
+titleCostUse <- usageCost |>
+  mutate(Cost_Use = `Transaction Expenditure Amount` / (Total_Usage * 2)) |>
+  filter(is.na(`Transaction Expenditure Amount`) == FALSE) |>
+  mutate(costUseBucket = case_when(
+    Total_Usage == 0 ~ 'No Usage',
+    Cost_Use < 20 ~ 'Under $20',
+    Cost_Use > 20 ~ 'Over $20'
+  ))
+
+titleCostUse
+```
+
+
+
+## Create Pie Chart for Cost/Use
+
+
+
+```{r}
+costUseCounts <- titleCostUse |>
+  group_by(costUseBucket) |>
+  summarise(n = n())
+
+costUseCounts$costUseBucket <- factor(costUseCounts$costUseBucket, levels = c('Over $20', 'Under $20', 'No Usage'))
+  
+  
+ggplot(costUseCounts, aes(x = '', y = n, fill = costUseBucket)) +
+  geom_col() +
+  coord_polar(theta = "y") +
+  geom_label(aes(label = n),
+             color = 'white',
+             position = position_stack(vjust = 0.4),
+             show.legend = FALSE) +
+  scale_fill_manual(values = c('#ddcc77', '#117733', '#882255')) +
+  theme(axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        axis.title = element_blank(),
+        panel.grid = element_blank(),
+        panel.background = element_rect(fill = "#ffffff"),
+        plot.background = element_rect(fill = "#ffffff"),
+        legend.background = element_rect(fill = "#ffffff")) +
+  ggtitle('Textbook Usage by Cost Per Use Bucket Fall 2025') +
+  guides(fill = guide_legend(title = 'Cost/Use'))
+
+ggsave('Textbook Usage by Cost Per Use Bucket Fall 2025.png', width = 6, height = 6, units = 'in', dpi = 300)
+```
+
+
+# Cost/Use Table for Used Books
+
+
+```{r}
+costUseTitles <- joinedCostUse |>
+  filter(is.na(Requests) == FALSE & Requests != 0)
+
+costUseTitles
+```
+
+
+
+```{r}
+cleanTable <- costUseTitles |>
+  select(Title.y, splitISBN, `Transaction Date Year-Month`, `Transaction Expenditure Amount`, Requests, costUse)
+
+colnames(cleanTable) <- c('Title', 'ISBN', 'Transaction Year-Month', 'Expenditure', 'Requests', 'Cost/Use')
+
+write.xlsx(cleanTable, 'Cost Per Use of the Used Textbooks Spring 2025.xlsx', rowNames = FALSE)
+```
+
