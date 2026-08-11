@@ -1,0 +1,556 @@
+---
+title: "Interlibrary Loan Analysis"
+author: "Alexander Harriman"
+date: "2024-11-14"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+This file combines data from ILLiad into bulk information on how the library's ILL program has developed over time. As of July 2026, the data focuses on ILL breakdown by department, requestor status (undergraduate student, graduate student, or employee), and title. The goal is to see who is engaging with ILL and what titles may be best for purchasing due to their high ILL request rate.
+
+Due to the large amount of data and the several steps needed to properly clean it, this code can take multiple hours to run. Make sure you do not need to run other projects in R before starting.
+
+
+```{r, warning = FALSE}
+library(dplyr)
+library(tidyverse)
+library(gt)
+library(ggplot2)
+library(readxl)
+library(qdapRegex)
+library(openxlsx)
+library(writexl)
+```
+
+
+# Load in the ILLiad Data
+
+All of the data is gathered directly from the ILLiad Client (if you have not set up a login specifically for the client, this must be set up first). Within the Custom Request Search tab, use the following Conditions:
+
+* Creation date between January 1, 2014 and the most recent date. If older data is already loaded in the cell below, simply fill in the most recent gaps. Give a week or so as a grace period so active loans aren't included.
+* Transaction Status equals "Request Finished"
+* Process Type equals "Borrowing"
+
+If the data and code are not saved in the same folder, change the information in setwd() below to match the data's current location. Include the entire file path.
+
+
+```{r, warning = FALSE}
+setwd('C:\\Users\\aharrima\\OneDrive - University of Tennessee\\Documents\\Interlibrary Loan Analysis')
+loans <- read_excel('01012014-07152026 borrowing.xlsx')
+```
+
+
+
+# Export Raw Loan Data to Excel
+
+Use this if you are combining multiple files together in the cell above and want to write one combined backup file. If you do not need to write a file, comment out this section to save run time.
+
+
+```{r}
+setwd('C:\\Users\\aharrima\\OneDrive - University of Tennessee\\Documents\\Interlibrary Loan Analysis')
+#write_xlsx(loans, '01012014-07152026 borrowing.xlsx')
+```
+
+
+
+# Select Only Useful Columns and Mandatory Filters
+
+
+Raw ILLiad exports contain a lot of information that is not needed for this report, so trimming the file will save memory space and speed up the code.
+
+
+```{r}
+slimLoans <- loans |>
+  select(`Transaction Number`, `Request Type`, `Loan Title`, `Loan Author`, `Loan Publisher`, `Photo Journal Title`, `Photo Journal Volume`, `Photo Journal Issue`, `Photo Article Author`, `Cited In`, `Cited Title`, `Accept Non English`, `Accept Alternate Edition`, `Transaction Status`, `Creation Date`, `ISSN`, `ESP Number`, `Lending Library`, `Document Type`, `Wanted By`, `IFM Cost`, `Item Info2`, `Loan Delivery Method`, Organization, `Library Name`, Department, Status, `User Name1`, `Loan Date`, `Photo Journal Month`, `Photo Journal Year`)
+
+slimLoans
+
+rm(loans)
+```
+
+
+
+
+
+
+
+# Add Columns that Split up Title Information
+
+
+Since titles can be added by hand, instead of title matching with the full name, only the first four words will be used to try and limit the effect of mistyped titles. If this is not enough, add more words below.
+
+
+```{r, warning = FALSE}
+detailedLoans <- slimLoans |>
+  mutate(Title = rm_caps(ifelse(is.na(`Loan Title`) == FALSE, tolower(`Loan Title`), tolower(`Photo Journal Title`)))) 
+
+for(i in 1:dim(detailedLoans)[1]){
+  detailedLoans$cleanTitle[i] <- tolower(gsub("[[:punct:]]", "", str_split(detailedLoans$Title[i], '\\*')[[1]][1]))
+  detailedLoans$keyWord1[i] <- ifelse(is.na(str_split(detailedLoans$cleanTitle[i], ' ')[[1]][1]) == TRUE, '',
+                                      str_split(detailedLoans$cleanTitle[i], ' ')[[1]][1])
+  detailedLoans$keyWord2[i] <- ifelse(is.na(str_split(detailedLoans$cleanTitle[i], ' ')[[1]][2]) == TRUE, '',
+                                      str_split(detailedLoans$cleanTitle[i], ' ')[[1]][2])
+  detailedLoans$keyWord3[i] <- ifelse(is.na(str_split(detailedLoans$cleanTitle[i], ' ')[[1]][3]) == TRUE, '',
+                                      str_split(detailedLoans$cleanTitle[i], ' ')[[1]][3])
+  detailedLoans$keyWord4[i] <- ifelse(is.na(str_split(detailedLoans$cleanTitle[i], ' ')[[1]][4]) == TRUE, '',
+                                      str_split(detailedLoans$cleanTitle[i], ' ')[[1]][4])
+}
+
+
+head(detailedLoans, n = 25)
+
+rm(slimLoans)
+```
+
+
+```{r}
+detailedLoans <- detailedLoans |>
+  mutate(titleCheck = paste0(keyWord1, ' ', keyWord2, ' ', keyWord3, ' ', keyWord4),
+         `ESP Number` = ifelse(`ESP Number` == 0, NA, `ESP Number`)) |>
+  filter(cleanTitle != '')
+```
+
+
+
+# Check for Missing Titles
+
+
+Some entries may have missing titles. This block checks those and sees what may or may not be taking place for future edits. 
+
+This should typically have 0 titles, but if there are any, then address those blank titles before progressing further.
+
+
+```{r}
+missingTitle <- detailedLoans |>
+  filter(Title == '') |>
+  select(`Loan Title`, `Photo Journal Title`, Title, cleanTitle)
+
+missingTitle
+```
+
+
+
+
+
+# Create a Library Purchased Filter
+
+
+Any title that has a "TKN-ACQ" line was purchased by the library at some point. This block marks those titles for use in the final report.
+
+By breaking up the run into three different datasets and combining them together later, the function runs much more efficiently. If the code needs to run faster, break up the titles into more chunks below.
+
+```{r}
+titles <- unique(detailedLoans$titleCheck)
+titleWithPurchaseA <- data.frame()
+titleWithPurchaseB <- data.frame()
+titleWithPurchaseC <- data.frame()
+
+for(i in 1:length(titles)){
+  if(i %% 2000 == 0){
+    print(i) #Used as a timer to track the function's time to completion
+  }
+  title1 <- titles[i]
+  
+  subset <- detailedLoans[detailedLoans$titleCheck == title1,]
+
+  
+  if('TKN - ACQ' %in% subset$`Lending Library`){
+    subset$IsPurchased <- 'Yes'
+  }
+  else{
+    subset$IsPurchased <- 'No'
+  }
+  
+  if(i <= 20000){
+    titleWithPurchaseA <- rbind(titleWithPurchaseA, subset)
+  }
+  else if(i <= 40000){
+    titleWithPurchaseB <- rbind(titleWithPurchaseB, subset)
+  }
+  else{
+    titleWithPurchaseC <- rbind(titleWithPurchaseC, subset)
+  }
+
+}
+
+
+titleWithPurchase <- rbind(titleWithPurchaseA, titleWithPurchaseB, titleWithPurchaseC) 
+
+check <- titleWithPurchase |>
+  group_by(IsPurchased) |>
+  summarise(n = n())
+
+check
+
+rm(detailedLoans)
+```
+
+
+
+# Fill in ESP Number Gaps
+
+Using just the title name does not work due to the same errors listed above. The ESP number is unique to each title. Use the keywords created above to fill in ESP gaps for joining later.
+
+Here, ESP filling follows the majority rule: whichever ESP number is used most often will be assigned to every instance of the title. If the most commonly used ESP is no information, then ESP info will be removed due to lack of sufficient accuracy.
+
+Just like with the last cleaning step, breaking up the titles makes the code more efficient.
+
+```{r, warning = FALSE}
+rm(titleWithPurchaseA)
+rm(titleWithPurchaseB)
+rm(titleWithPurchaseC)
+
+
+titles <- unique(titleWithPurchase$titleCheck)
+espFilledLoansA <- data.frame()
+espFilledLoansB <- data.frame()
+espFilledLoansC <- data.frame()
+
+for(i in 1:length(titles)){
+  if(i %% 2000 == 0){
+    print(i) #Used as a timer to track the function's time to completion
+  }
+  title1 <- titles[i]
+  
+  subset <- titleWithPurchase[titleWithPurchase$titleCheck == title1,]
+
+  if(sum(is.na(subset$`ESP Number`) == TRUE) == 0){
+    filledSubset <- subset
+  }
+  else{
+    espBreakdown <- subset |>
+      group_by(`ESP Number`) |>
+      summarise(n = n()) |>
+      filter(is.na(`ESP Number`) == FALSE)
+  
+    maxESP <- espBreakdown[espBreakdown$n == max(espBreakdown$n),]
+  
+    number1 <- ifelse(dim(espBreakdown)[1] == 0, NA, maxESP$`ESP Number`)
+
+    filledSubset <- subset |>
+      mutate(`ESP Number` = number1) 
+  }
+
+  
+  if(i <= 20000){
+    espFilledLoansA <- rbind(espFilledLoansA, filledSubset)
+  }
+  else if(i <= 40000){
+    espFilledLoansB <- rbind(espFilledLoansB, filledSubset)
+  }
+  else{
+    espFilledLoansC <- rbind(espFilledLoansC, filledSubset)
+  }
+}
+
+espFilledLoans <- rbind(espFilledLoansA, espFilledLoansB, espFilledLoansC) |>
+  filter(cleanTitle != '')
+
+
+sum(is.na(espFilledLoans$`ESP Number`))
+```
+
+
+In the test below, the blankESP column should be either 0 or the same as the n column.
+
+```{r}
+test <- espFilledLoans |>
+  group_by(cleanTitle) |>
+  summarise(n = n(),
+            blankESP = sum(is.na(`ESP Number`) == TRUE)) |>
+  arrange(desc(n))
+
+test
+
+```
+
+
+# Fill in the ISSNs
+
+When filling in the ISSNs after cleaning up the ESP Numbers, take the most common number that is not the ESP Number itself.
+
+Some journals that offer print and online versions will have two ISSNs, one for each type.
+
+This block also can be made more efficient by breaking up into more chunks. This is the final block that takes significant time to run.
+
+```{r, warning = FALSE}
+rm(espFilledLoansA)
+rm(espFilledLoansB)
+rm(espFilledLoansC)
+titles <- unique(espFilledLoans$titleCheck)
+
+issnFilledLoansA <- data.frame()
+issnFilledLoansB <- data.frame()
+issnFilledLoansC <- data.frame()
+
+for(i in 1:length(titles)){
+  if(i %% 2000 == 0){
+    print(i) #Used as a timer to track the function's time to completion
+  }
+  title1 <- titles[i]
+  
+  subset <- espFilledLoans[espFilledLoans$titleCheck == title1,]
+
+  if(sum(is.na(subset$ISSN) == TRUE) == 0){
+    filledSubset <- subset
+  }
+  else{
+    issnBreakdown <- subset |>
+      group_by(ISSN) |>
+      summarise(n = n()) |>
+      filter(is.na(ISSN) == FALSE)
+  
+    maxISSN <- issnBreakdown[issnBreakdown$n == max(issnBreakdown$n),]
+  
+    number1 <- ifelse(dim(issnBreakdown)[1] == 0, NA, maxISSN$ISSN)
+
+    filledSubset <- subset |>
+      mutate(ISSN = number1) 
+  }
+
+  
+  if(i <= 20000){
+    issnFilledLoansA <- rbind(issnFilledLoansA, filledSubset)
+  }
+  else if(i <= 40000){
+    issnFilledLoansB <- rbind(issnFilledLoansB, filledSubset)
+  }
+  else{
+    issnFilledLoansC <- rbind(issnFilledLoansC, filledSubset)
+  }
+}
+
+
+issnFilledLoans <- rbind(issnFilledLoansA, issnFilledLoansB, issnFilledLoansC)
+
+sum(is.na(issnFilledLoans$ISSN))
+```
+
+
+# Clean Up the Publication Dates
+
+This block turns the Publication Date into a consistent date format, as this is something else added by hand that can contain extra punctuation.
+
+
+```{r}
+dateFilledLoans <- issnFilledLoans |>
+  mutate(`Photo Journal Month` = gsub('[[:punct:]]', '', `Photo Journal Month`),
+         `Photo Journal Year` = gsub('[[:punct:]]', '', `Photo Journal Year`),
+         `Loan Date` = gsub('[[:punct:]]', '', `Loan Date`)) |>
+  mutate(Date = case_when(
+    is.na(`Loan Date`) == FALSE ~ `Loan Date`, 
+    is.na(`Loan Date`) == TRUE & is.na(`Photo Journal Month`) == TRUE ~ `Photo Journal Year`,
+    .default = paste0(`Photo Journal Month`, ' ', `Photo Journal Year`)
+  ))
+
+dateFilledLoans
+```
+
+
+
+
+# Clean Up the Department Column
+
+The PowerBI report shows ILL by department, but this is also something that can be added by hand. The next few blocks attempt to clean up the Department information into consistent labels.
+
+
+## Remove all Punctuation
+
+```{r}
+departmentCleanedLoans <- dateFilledLoans |>
+  mutate(Department = str_replace(Department, '\\*', ''))
+
+departmentCleanedLoans
+```
+
+
+## Handle Duplicated Name Formats
+
+
+This takes departments that are written multiple ways and standardizes them. If any similar departments are not listed below, add another line to the case_when() statement to clean those departments up.
+
+
+```{r}
+departmentCleanedLoans <- departmentCleanedLoans |>
+  mutate(Department = case_when(
+    Department %in% c('Kinesiology', 'Kinesiology, Recreation & Sport', 'Kinesiology, Recreation & Sports Studies', 'Kinesiology, Recreation, & Sport Studies (KRSS)', 'Kinesiology, Recreation, and Sport Studies') ~ 'Kinesiology, Recreation, & Sports Studies (KRSS)',
+    Department %in% c('Energy Science & Engineering', 'Energy Science & Engineering (Bredesen Center)', 'Bredesen Center') ~ 'Energy Science & Engineering',
+    Department %in% c('Comparative & Experimental Medicine', 'Comparative & Experimental Medicine (CEM)') ~ 'Comparative & Experimental Medicine',
+    Department %in% c('Educational Administration & Cultural Studies', 'Education Administration and Cultural Studies') ~ 'Educational Administration & Cultural Studies',
+    Department %in% c('Educational Leadership & Policy Studies', 'Educational Leadership & Policy Studies (ELPS)') ~ 'Educational Leadership & Policy Studies (ELPS)',
+    Department %in% c('Educational Psych & Couns', 'Educational Psychology & Counseling') ~ 'Educational Psychology & Counseling',
+    Department %in% c('Large Animal Clinical Science', 'Large Animal Clinical Sciences') ~ 'Large Animal Clinical Sciences',
+    Department %in% c('Mechanical, Aerospace & Biomedical Engineering', 'Mechanical, Aerospace & Biomedical Engineering (MABE)', 'Mechanical, Aerospace and Biomedical Engineering') ~ 'Mechanical, Aerospace & Biomedical Engineering (MABE)',
+    Department %in% c('Municipal Technical Advisory Service', 'Municipal Technical Advisory Service (MTAS)') ~ 'Municipal Technical Advisory Service (MTAS)',
+    Department %in% c('Retail Hospitality & Tourism Management', 'Retail Hospitality & Tourism Management (RHTM)') ~ 'Retail Hospitality & Tourism Management (RHTM)',
+    Department %in% c('Theory & Practice in Teacher Education', 'Theory and Practice in Education') ~ 'Theory & Practice in Teacher Education',
+    Department %in% c('Comparative & Experimental Medicine', 'Comparative Medicine') ~ 'Comparative & Experimental Medicine',
+    Department %in% c('Counselling, Deafness & Human Services', 'Counseling, Deafness & Human Services') ~ 'Counseling, Deafness & Human Services',
+    Department %in% c('Educational Administration and Cultural Studies', 'Educational Administration & Culture Studies') ~ 'Educational Administration & Cultural Studies',
+    Department %in% c('Modern Foreign Languages', 'Modern Foreign Languages and Literatures') ~ 'Modern Foreign Languages and Literatures',
+    Department %in% c('Biosys Engr&Soil Sci-Univ', 'Biosystems Engineering & Soil Science') ~ 'Biosystems Engineering & Soil Science',
+    Department %in% c('Business Administration', 'Business Administration Undergraduate Programs') ~ 'Business Administration',
+    Department %in% c('Center for Business & Economic Research', 'Center for Business & Economic Research (CSBD)') ~ 'Center for Business & Economic Research (CSBD)',
+    Department %in% c('College of Arts & Sciences', 'College of Arts and Sciences - Advising Services') ~ 'College of Arts & Sciences',
+    Department %in% c('College of Engineering', 'College of Engineering - Admin') ~ 'College of Engineering',
+    Department %in% c('College Student Personel', 'College Student Personnel') ~ 'College Student Personnel',
+    Department %in% c('Counseling', 'Counseling Center') ~ 'Counseling Center',
+    Department %in% c('Human Resources', 'Human Resources-Knoxville') ~ 'Human Resources',
+    Department %in% c('Joint Institute for Computational Sciences', 'Joint Institute for Computational Sciences (JICS)') ~ 'Joint Institute for Computational Sciences',
+    Department %in% c('Math', 'Mathematics') ~ 'Mathematics',
+    Department %in% c('Mechanical & Aerospace Engineering & Engineering                  Science', 'Mechanical & Aerospace Engineering & Engineering Science') ~ 'Mechanical & Aerospace Engineering & Engineering Science',
+    Department %in% c('Modern Foreign Languages and Literatures', 'Modern Foreign Languages & Literatures') ~ 'Modern Foreign Languages & Literatures',
+    Department %in% c('OIT', 'Office of Information Technology (OIT)') ~ 'Office of Information Technology (OIT)',
+    Department %in% c('Retail Hospitality & Tourism Management (RHTM)', 'Retail, Hospitality & Tourism') ~ 'Retail Hospitality & Tourism Management (RHTM)',
+    Department %in% c('Small Animal Clinical Science', 'Small Animal Clinical Sciences') ~ 'Small Animal Clinical Sciences',
+    Department %in% c('Tennessee Teaching and Learning Center', 'Tennessee Teaching & Learning Center') ~ 'Tennessee Teaching & Learning Center',
+    Department %in% c('Theory & Practice in Teacher Education', 'Theory and Practice in Teacher Education') ~ 'Theory & Practice in Teacher Education',
+    Department %in% c('Thornton Athletics Student Life Center', 'Thornton Center') ~ 'Thornton Athletics Student Life Center',
+    Department %in% c('Veterinary Medicine', 'Veterinary Medicine Administration') ~ 'Veterinary Medicine',
+    .default = Department
+  ))
+```
+
+
+
+# Check ILL Count by Department
+
+This can also be used to check department name consistency.
+
+```{r}
+test <- departmentCleanedLoans |>
+  group_by(Department) |>
+  summarise(n = n()) |>
+  arrange(desc(n))
+
+test
+```
+
+
+
+# Restore the Title Names
+
+Since all titles were converted to lowercase, this makes them back into title format for the final report.
+
+
+```{r}
+cleanTitles <- departmentCleanedLoans |>
+  mutate(properTitle = str_to_title(cleanTitle))
+
+cleanTitles
+```
+
+
+
+# Clean up Loan Costs
+
+The parse_number() function will take the number out of the Cost column, omitting any added punctuation or extra characters.
+
+```{r}
+cleanTitles <- cleanTitles |>
+  mutate(`IFM Cost` = parse_number(`IFM Cost`))
+```
+
+
+
+# Normalize the ISSNs and Publication Dates for Reports
+
+This cleans up any punctuation from the ISSN and Date information for the final report.
+
+```{r}
+cleanTitles <- cleanTitles |>
+  mutate(ISSN = gsub('[[:punct:]]', '', ISSN))
+```
+
+
+
+# Clean up the Publication Dates and Find Publication Age
+
+This finds how old the requested item is at the time of its request, along with other year formatting for those request dates.
+
+
+```{r}
+cleanDates <- cleanTitles |>
+  mutate(transactionYear = format(`Creation Date`, format = '%Y')) |>
+  mutate(pubDate = as.numeric(word(Date, -1))) |>
+  mutate(loanAge = as.numeric(transactionYear) - pubDate)
+
+cleanDates
+```
+
+
+# Create Calculation Fields for PowerBI Integrations
+
+These are the created metrics and cleaned-up columns needed for PowerBI views, as labeled below.
+
+```{r}
+powerBITitles <- cleanDates |>
+  # Classification of Loanee
+  mutate(
+    staffUsers = ifelse(Status == 'Faculty' | Status == 'Faculty-Dist' | Status == 'Staff' | Status == 'Staff-Dist', 1, 0),
+    graduateUsers = ifelse(Status == 'Graduate' | Status == 'Graduate-Dist' | Status == 'Graduate (Distance Ed)', 1, 0),
+    undergradUsers = ifelse(Status == 'Undergraduate', 1, 0)) |>
+  # Title Cleaning
+  mutate(properTitle = trimws(properTitle)) |>
+  # Loan Date and Loan Age Cleaning
+  mutate(pubDate = ifelse(is.na(pubDate) == TRUE, 999, pubDate),
+         loanAge = ifelse(is.na(loanAge) == TRUE, 999, loanAge)) |>
+  # Loan Age Bucketing
+  mutate(ageBucket = case_when(
+    loanAge < 0 | loanAge >= 999 ~ 'Unknown',
+    loanAge >= 0 & loanAge <= 1 ~ '0-1',
+    loanAge >= 2 & loanAge <= 5 ~ '2-5',
+    loanAge >= 6 & loanAge <= 10 ~ '6-10',
+    loanAge >= 11 & loanAge <= 20 ~ '11-20',
+    loanAge >= 21 & loanAge <= 40 ~ '21-40',
+    loanAge >= 41 & loanAge < 999 ~ '41+',
+    .default = NA
+  )) |>
+  # Loan Rate Calculation
+  mutate(staffLoanRate = staffUsers / 1,
+         studentLoanRate = (graduateUsers + undergradUsers) / 1) |>
+  # ISSN Cleaning
+  mutate(ISSN = gsub('[abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWYZ]', '', ISSN)) |>
+  # Recent Article Marking
+  mutate(isRecentArticle = ifelse(ageBucket == '0-1', 1, 0)) |>
+  mutate(isRecentArticle = ifelse(is.na(isRecentArticle) == TRUE, 0, isRecentArticle)) |>
+  # The select() below contains the final columns that will enter the PowerBI report. Make sure all necessary information is here. If the report is very slow, then remove any unnecessary columns.
+  select(`Request Type`, properTitle, ISSN, `ESP Number`, `Cited In`, IsPurchased, `IFM Cost`, `Lending Library`, `Library Name`, `Document Type`, Department, Status, `User Name1`, `Creation Date`, transactionYear, pubDate, loanAge, isRecentArticle, ageBucket, staffUsers, graduateUsers, undergradUsers, staffLoanRate, studentLoanRate) |>
+  # Blank Information Filtering
+  filter(properTitle != '')
+
+powerBITitles
+```
+
+
+
+# Export the Cleaned up Data
+
+Change the setwd() function as needed depending on where the data needs to go.
+
+```{r}
+setwd('C:\\Users\\aharrima\\OneDrive - University of Tennessee\\Documents\\Interlibrary Loan Analysis')
+write_xlsx(powerBITitles, 'ILL Borrowing Data.xlsx')
+```
+
+
+
+# Next Steps:
+
+
+### Updating the ILL Dashboard?
+
+Provided that the data did not change names, did not change in size (either adding, subtracting, or editing columns), and did not change location, you should be able to refresh the ILL Borrowing Data table within your local copy of the dashboard. If any of those things happened, the path to the new data may need to be refreshed within PowerBI.
+
+
+After updating and re-publishing the dashboard, upload the new ILL borrowing file to the Documents -> Workspace -> Interlibrary Borrowing Reports folder. Move the older data file, along with any partial data files you may have downloaded, into the Interlibrary Borrowing Data Archive folder, located in the folder listed above.
+
+
+### Editing the code for troubleshooting or data manipulation reasons?
+
+Make sure to re-upload the updated file to GitHub using a pull request.
+
