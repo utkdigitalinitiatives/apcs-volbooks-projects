@@ -22,13 +22,17 @@ library(lubridate)
 
 This file tracks the usage of all films and other videos purchased for classroom use. This is a supplement to the VolBooks report, which tracks similar information for textbooks. Since the VolBooks data and the video purchasing data are different, not every metric will convert one-to-one.
 
+This report was last updated after the Spring 2026 semester.
+
 
 # Load Steven's TDX Ticket Request Data
 
 Steven keeps this up to date as new videos are bought. Each tab of the report corresponds with a different semester when the video was bought, but this does not always line up with the access date within the file.
 
 
-```{r}
+```{r, warning = FALSE}
+setwd('C:\\Users\\aharrima\\OneDrive - University of Tennessee\\Documents\\Classroom Use Digital Media Report')
+
 read_excel_allsheets <- function(filename, tibble = FALSE) {
     sheets <- readxl::excel_sheets(filename)
     x <- lapply(sheets, function(X) readxl::read_excel(filename, sheet = X))
@@ -37,7 +41,7 @@ read_excel_allsheets <- function(filename, tibble = FALSE) {
     x
 }
 
-allTDXTickets <- read_excel_allsheets('TDX Ticket Requests May 4.xlsx')
+allTDXTickets <- read_excel_allsheets('TDX Ticket Requests September 10.xlsx')
 ```
 
 
@@ -46,8 +50,30 @@ FOR EACH SEMESTER, add a new block to the cell below and edit the semester accor
 Each tab's column information may also be slightly different due to manually added notes not being consistent. Only the main data is necessary.
 
 ```{r}
+#Fall 2026
+fall26 <- as.data.frame(allTDXTickets[1])
+
+colnames(fall26) <- c('Ticket_Number', 'Instructor', 'Work_Column', 'Title_of_Request', 'Course', 'Class_Semester', 'Title_Count_in_Request', 'Notes', 'X', 'Y', 'Z', 'W')
+
+fall26 <- fall26 |>
+  select(Ticket_Number, Title_of_Request, Instructor, Course, Class_Semester, Title_Count_in_Request, Notes) |>
+  filter(is.na(Ticket_Number) == FALSE) |>
+  mutate(Ticket_Received_Semester = 'Fall 2026')
+
+
+#Summer 2026
+summer26 <- as.data.frame(allTDXTickets[2])
+
+colnames(summer26) <- c('Ticket_Number', 'Instructor', 'Work_Column', 'Title_of_Request', 'Course', 'Class_Semester', 'Title_Count_in_Request', 'Notes', 'X', 'Y', 'Z', 'W')
+
+summer26 <- summer26 |>
+  select(Ticket_Number, Title_of_Request, Instructor, Course, Class_Semester, Title_Count_in_Request, Notes) |>
+  filter(is.na(Ticket_Number) == FALSE) |>
+  mutate(Ticket_Received_Semester = 'Summer 2026')
+
+
 #Spring 2026
-spring26 <- as.data.frame(allTDXTickets[1])
+spring26 <- as.data.frame(allTDXTickets[3])
 
 colnames(spring26) <- c('Ticket_Number', 'Instructor', 'Work_Column', 'Title_of_Request', 'Course', 'Class_Semester', 'Title_Count_in_Request', 'Notes', 'X', 'Y', 'Z', 'W')
 
@@ -58,7 +84,7 @@ spring26 <- spring26 |>
 
 
 #Fall 2025
-fall25 <- as.data.frame(allTDXTickets[2])
+fall25 <- as.data.frame(allTDXTickets[4])
 
 colnames(fall25) <- c('Ticket_Number', 'Instructor', 'Work_Column', 'Title_of_Request', 'Course', 'Class_Semester', 'Title_Count_in_Request', 'Notes', 'X', 'Y', 'Z', 'W')
 
@@ -69,7 +95,7 @@ fall25 <- fall25 |>
 
 
 #Summer 2025
-summer25 <- as.data.frame(allTDXTickets[3])
+summer25 <- as.data.frame(allTDXTickets[5])
 
 colnames(summer25) <- c('Ticket_Number', 'Instructor', 'Title_of_Request', 'Course', 'Class_Semester', 'Title_Count_in_Request', 'Notes')
 
@@ -80,7 +106,7 @@ summer25 <- summer25 |>
 
 
 #Spring 2025
-spring25 <- as.data.frame(allTDXTickets[4])
+spring25 <- as.data.frame(allTDXTickets[6])
 
 colnames(spring25) <- c('Ticket_Number', 'Instructor', 'Work_Column', 'Title_of_Request', 'Course', 'Class_Semester', 'Title_Count_in_Request', 'Notes', 'X', 'Y', 'Z', 'W', 'V', 'U')
 
@@ -91,7 +117,7 @@ spring25 <- spring25 |>
 
 
 #Fall 2024
-fall24 <- as.data.frame(allTDXTickets[5])
+fall24 <- as.data.frame(allTDXTickets[7])
 
 colnames(fall24) <- c('Ticket_Number', 'Instructor', 'Title_of_Request', 'Course', 'Class_Semester', 'Title_Count_in_Request', 'Notes')
 
@@ -102,7 +128,7 @@ fall24 <- fall24 |>
 
 
 #Summer 2024
-summer24 <- as.data.frame(allTDXTickets[6])
+summer24 <- as.data.frame(allTDXTickets[8])
 
 colnames(summer24) <- c('Ticket_Number', 'Instructor', 'Title_of_Request', 'Course', 'Class_Semester', 'Title_Count_in_Request', 'Notes')
 
@@ -113,7 +139,7 @@ summer24 <- summer24 |>
 
 
 #Spring 2024
-spring24 <- as.data.frame(allTDXTickets[7])
+spring24 <- as.data.frame(allTDXTickets[9])
 
 colnames(spring24) <- c('Ticket_Number', 'Instructor', 'Title_of_Request', 'Course', 'Class_Semester', 'Title_Count_in_Request', 'Notes')
 
@@ -123,7 +149,7 @@ spring24 <- spring24 |>
   mutate(Ticket_Received_Semester = 'Spring 2024')
 
 
-allRequests <- rbind(spring26, fall25, summer25, spring25, fall24, summer24, spring24) |>
+allRequests <- rbind(fall26, summer26, spring26, fall25, summer25, spring25, fall24, summer24, spring24) |>
   mutate(Ticket_Number = as.character(Ticket_Number))
 ```
 
@@ -132,12 +158,14 @@ allRequests <- rbind(spring26, fall25, summer25, spring25, fall24, summer24, spr
 # Get the Video Purchase Data from Alma
 
 
-All video purchases that are specifically for classroom use purposes have the 4th reporting code TDX, TDX - Kanopy, TDX - DSL, or TDX - PPR. 
+All video purchases that are specifically for classroom use purposes have the 4th reporting code TDX, TDX - Kanopy, TDX - DSL, or TDX - PPR. This is tracked in the Alma Analytics report "Films Bought for Classroom Use". Save a local copy of this analytics file and load it in below.
 
 
 
-```{r}
-videoPurchases <- read_excel('Film Bought for Classroom Use May 11.xlsx')
+```{r, warning = FALSE}
+setwd('C:\\Users\\aharrima\\OneDrive - University of Tennessee\\Documents\\Classroom Use Digital Media Report')
+
+videoPurchases <- read_excel('Film Bought for Classroom Use September 10.xlsx')
 ```
 
 
@@ -162,6 +190,8 @@ cleanPurchases <- videoPurchases |>
     `Transaction Date` >= as.POSIXct('2025-05-15') & `Transaction Date` < as.POSIXct('2025-08-12') ~ 'Summer 2025',
     `Transaction Date` >= as.POSIXct('2025-08-12') & `Transaction Date` < as.POSIXct('2026-01-01') ~ 'Fall 2025',
     `Transaction Date` >= as.POSIXct('2026-01-01') & `Transaction Date` < as.POSIXct('2026-05-15') ~ 'Spring 2026',
+    `Transaction Date` >= as.POSIXct('2026-05-15') & `Transaction Date` < as.POSIXct('2026-08-15') ~ 'Summer 2026',
+    `Transaction Date` >= as.POSIXct('2026-08-15') & `Transaction Date` < as.POSIXct('2026-12-15') ~ 'Fall 2026',
     .default = 'Unknown'
   ))
 
@@ -180,6 +210,8 @@ FOR EACH SEMESTER, add to the title list.
 ```{r}
 purchasesForJoin <- cleanPurchases |>
   mutate(Ticket_Number = case_when(
+    # Initial Load - Through Spring 2026
+    
     Title == '12.12 : the day = Sŏul ŭi pom.' ~ '22951675',
     Title == 'Afghan star.' ~ '21597504',
     Title == 'De xian chao fan = All about love /' ~ '23450213',
@@ -230,6 +262,18 @@ purchasesForJoin <- cleanPurchases |>
     Title == 'To live = Huo zhe /' ~ '22951652',
     Title == 'Wagner & me.' ~ '21719599',
     Title == 'We have just begun : the 1919 Elaine Riot, massacre, and dispossession /' ~ '23586317',
+    
+    # Summer 2026
+    Title == 'Bikes vs cars /' ~ '24310750',
+    Title == 'Life after /' ~ '24304957',
+    
+    
+    # Fall 2026
+    Title == "The Goalie’s Anxiety at the Penalty Kick /" ~ '24389147',
+    Title == 'The young Karl Marx = Le jeune Karl Marx.' ~ '24520250',
+    Title == 'The story of plastic.' ~ '24340211',
+    Title == 'Welcome to Unity.' ~ '24374844',
+    
     .default = 'Unknown'
   ))
 ```
@@ -256,12 +300,25 @@ Usage for films comes from several sources.
 Usage starts from January 2023.
 
 
-```{r}
-kanopyUsage <- read_excel('Kanopy-DB-Jan2023-Apr2026.xlsx') |>
+```{r, warning = FALSE}
+setwd('C:\\Users\\aharrima\\OneDrive - University of Tennessee\\Documents\\Classroom Use Digital Media Report')
+
+kanopyUsageA <- read_excel('Kanopy-DB-Jan2023-Apr2026.xlsx') |>
   select(`Video Title`, Supplier, Plays) |>
   mutate(Platform = 'Kanopy',
          Metric_Type = 'Plays',
          Plays = ifelse(is.na(Plays) == TRUE, 0, Plays))
+
+kanopyUsageB <- read_excel('Kanopy-DB-May2026-Aug2026.xlsx') |>
+  select(`Video Title`, Supplier, Plays) |>
+  mutate(Platform = 'Kanopy',
+         Metric_Type = 'Plays',
+         Plays = ifelse(is.na(Plays) == TRUE, 0, Plays))
+
+kanopyUsage <- rbind(kanopyUsageA, kanopyUsageB) |>
+  group_by(`Video Title`, Supplier, Platform, Metric_Type) |>
+  summarise(Plays = sum(Plays)) |>
+  ungroup()
 
 kanopyUsage
 ```
@@ -274,6 +331,8 @@ kanopyUsage
 ```{r}
 kanopyForRequestJoin <- kanopyUsage |>
   mutate(Ticket_Number = case_when(
+    # Initial List - Up to Spring 2026
+    
     `Video Title` == '12.12: The Day' ~ '22951675',
     `Video Title` == 'Save The Green Planet' ~ '23633286',
     `Video Title` == 'Afghan Star' ~ '21597504',
@@ -305,6 +364,15 @@ kanopyForRequestJoin <- kanopyUsage |>
     `Video Title` == 'The Princess of Montpensier' ~ '21769916',
     `Video Title` == 'Throne of Blood' ~ '21504099',
     `Video Title` == 'Wagner & Me' ~ '21719599',
+    
+    # Summer 2026
+    `Video Title` == 'Bikes Vs. Cars' ~ '24310750',
+    
+    # Fall 2026 - Not Completed Yet
+    `Video Title` == 'Hoop Dreams' ~ '24388939',
+    `Video Title` == 'The Story of Plastic' ~ '24340211',
+    `Video Title` == 'The Young Karl Marx' ~ '24520250',
+    `Video Title` == 'Welcome to Unity' ~ '24374844',
     .default = 'Unknown'
   ))
 
@@ -329,6 +397,7 @@ videoRequestKanopy
 ```{r}
 kanopyForPurchaseJoin <- kanopyUsage |>
   mutate(`MMS Id` = case_when(
+    #Initial Load - Up to Spring 2026
     `Video Title` == 'Welcome Mr. Marshall!' ~ '9926568386902311',
     `Video Title` == '12.12: The Day' ~ '9926679661602311',
     `Video Title` == 'A Woman Under the Influence' ~ '9926749916202311',
@@ -437,6 +506,13 @@ kanopyForPurchaseJoin <- kanopyUsage |>
     `Video Title` == 'I, the Worst of All' ~ '9926479786402311',
     `Video Title` == 'Yojimbo' ~ '9926453387202311',
     `Video Title` == 'Young Törless' ~ '9926629477002311',
+    
+    # Summer 2026
+    `Video Title` == 'Bikes Vs. Cars' ~ '9927023969002311',
+    `Video Title` == 'The Young Karl Marx' ~ '9925981470002311',
+    `Video Title` == 'The Story of Plastic' ~ '9927026764902311',
+    `Video Title` == 'Welcome to Unity' ~ '9927025068702311',
+    
     .default = 'Unknown'
   ))
 
@@ -458,11 +534,23 @@ videoPurchaseKanopy <- left_join(cleanPurchases, kanopyForPurchaseJoin, by = 'MM
 
 Usage starts from January 2023.
 
-```{r}
-docuseekUsage <- read_excel('Docuseek-IRM1-Jan2023-Apr2026.xlsx') |>
+```{r, warning = FALSE}
+setwd('C:\\Users\\aharrima\\OneDrive - University of Tennessee\\Documents\\Classroom Use Digital Media Report')
+
+docuseekUsageA <- read_excel('Docuseek-IRM1-Jan2023-Apr2026.xlsx') |>
   filter(Metric_Type == 'Total_Item_Requests') |>
   mutate(Platform = 'Docuseek') |>
   select(Item, Platform, Reporting_Period_Total)
+
+docuseekUsageB <- read_excel('Docuseek-IRM1-May2026-Aug2026.xlsx') |>
+  filter(Metric_Type == 'Total_Item_Requests') |>
+  mutate(Platform = 'Docuseek') |>
+  select(Item, Platform, Reporting_Period_Total)
+
+docuseekUsage <- rbind(docuseekUsageA, docuseekUsageB) |>
+  group_by(Item, Platform) |>
+  summarise(Reporting_Period_Total = sum(Reporting_Period_Total)) |>
+  ungroup()
 
 docuseekUsage
 ```
@@ -476,8 +564,14 @@ docuseekUsage
 ```{r}
 docuseekForRequestJoin <- docuseekUsage |>
   mutate(Ticket_Number = case_when(
+    # Initial Load - Up to Spring 2026
     Item == 'Powerlands' ~ '21689214',
     Item == "Queer China, 'Comrade' China" ~ '20821773',
+    
+    # Summer 2026
+    
+    # Fall 2026 - Incomplete as of September 2026
+    
     .default = 'Unknown'
   ))
 
@@ -502,6 +596,7 @@ videoRequestDocuseek
 ```{r}
 docuseekForPurchaseJoin <- docuseekUsage |>
   mutate(`MMS Id` = case_when(
+    # Initial Load - Up to Spring 2026
     Item == 'Bamako' ~ '9926479782002311',
     Item == "Can't Do It In Europe" ~ '9924096520102311',
     Item == 'Dido and Aeneas' ~ '9926708295802311',
@@ -510,6 +605,10 @@ docuseekForPurchaseJoin <- docuseekUsage |>
     Item == 'Powerlands' ~ '9926602681302311',
     Item == 'The Light in Her Eyes' ~ '9926454782902311',
     Item == "Queer China, 'Comrade' China" ~ '9926454782902311',
+    
+    # Summer 2026
+    
+    # Fall 2026 - Incomplete up to September 2026
     .default = 'Unknown'
   ))
 
@@ -539,11 +638,13 @@ videoPurchaseDocuseek
 This is for all films and will need to be filtered down. When joining to the purchases, it can be done via MMS ID. Joining to the requests will take more work.
 
 
-Usage starts from January 2023.
+Usage starts from January 2023 and is stored in the Alma Analytics file named "Classroom Digital Film Usage".
 
 
-```{r}
-almaDigitalUsage <- read_excel('Classroom Digital Film Usage May 11.xlsx') |>
+```{r, warning = FALSE}
+setwd('C:\\Users\\aharrima\\OneDrive - University of Tennessee\\Documents\\Classroom Use Digital Media Report')
+
+almaDigitalUsage <- read_excel('Classroom Digital Film Usage September 10.xlsx') |>
   group_by(`MMS Id`) |>
   summarise(Title = Title[1],
             File_Views = sum(`Num of digital file views`)) |>
@@ -566,6 +667,7 @@ almaDigitalUsage
 ```{r}
 almaDigitalForRequestJoin <- almaDigitalUsage |>
   mutate(Ticket_Number = case_when(
+    # Initial Load - Up to Spring 2026
     Title == 'Shall we dansu? /' ~ '23531257',
     Title == 'Lan feng cheng The blue kite /' ~ '23449108',
     Title == 'Carving the divine : Buddhist sculptors of Japan /' ~ '22701274',
@@ -579,6 +681,12 @@ almaDigitalForRequestJoin <- almaDigitalUsage |>
     Title == 'Stranger with a camera /' ~ '21402404',
     Title == 'The hottest August /' ~ '21691725',
     Title == 'We have just begun : the 1919 Elaine Riot, massacre, and dispossession /' ~ '23586317',
+    
+    # Summer 2026
+    Title == 'Life after /' ~ '24304957',
+    
+    # Fall 2026 - Incomplete as of September 10
+    
     .default = 'Unknown'
   ))
 
@@ -615,17 +723,33 @@ videoPurchaseAlmaDigital
 
 ## SWANK Digital Campus
 
-Usage starts from November 2023.
+Usage starts from January 2023.
 
 
-```{r}
-swankUsage <- read_excel('DigitalCampus-DB-Jan2023-Apr2026.xlsx', skip = 5) |>
+```{r, warning = FALSE}
+setwd('C:\\Users\\aharrima\\OneDrive - University of Tennessee\\Documents\\Classroom Use Digital Media Report')
+
+swankUsageA <- read_excel('DigitalCampus-DB-Jan2023-Apr2026.xlsx', skip = 5) |>
   select(Title, Platform, `Reporting Period Total Views`) |>
   group_by(Title, Platform) |>
   summarise(`Reporting Period Total Views` = sum(`Reporting Period Total Views`)) |>
   ungroup() |>
   mutate(Metric_Type = 'Title Playbacks',
          Platform = 'SWANK Digital Campus')
+
+swankUsageB <- read_excel('DigitalCampus-DB-May2026-Aug2026.xlsx', skip = 5) |>
+  select(Title, Platform, `Reporting Period Total Views`) |>
+  group_by(Title, Platform) |>
+  summarise(`Reporting Period Total Views` = sum(`Reporting Period Total Views`)) |>
+  ungroup() |>
+  mutate(Metric_Type = 'Title Playbacks',
+         Platform = 'SWANK Digital Campus')
+
+
+swankUsage <- rbind(swankUsageA, swankUsageB) |>
+  group_by(Title, Platform, Metric_Type) |>
+  summarise(`Reporting Period Total Views` = sum(`Reporting Period Total Views`)) |>
+  ungroup()
 
 swankUsage
 ```
@@ -639,21 +763,29 @@ swankUsage
 There are currently no SWANK titles that line up with requests, but in the future, they would go here.
 
 ```{r}
-#swankForRequestJoin <- swankUsage |>
-#  mutate(Ticket_Number = case_when(
-#    .default = 'Unknown'
-#  ))
+swankForRequestJoin <- swankUsage |>
+  mutate(Ticket_Number = case_when(
+    # Summer 2026
+    Title == 'Adaptation' ~ '24142154',
+    Title == 'Cry Freedom' ~ '24338462',
+    Title == 'Troy' ~ '24134764',
+    
+    # Fall 2026 - Incomplete
+    Title == 'A League of Their Own' ~ '24389095',
+    Title == 'Hoop Dreams' ~ '24388939',
+    Title == 'The Iron Claw' ~ '24388861',
+    
+    .default = 'Unknown'
+  ))
 
-#swankForRequestJoin
+swankForRequestJoin
 ```
 
 
 
 
 ```{r}
-#videoRequestSwank <- left_join(videoRequestAlmaDigital, swankForRequestJoin, by = 'Ticket_Number')
-
-videoRequestSwank <- videoRequestAlmaDigital 
+videoRequestSwank <- left_join(videoRequestAlmaDigital, swankForRequestJoin, by = 'Ticket_Number')
 
 videoRequestSwank
 ```
@@ -667,10 +799,16 @@ videoRequestSwank
 ```{r}
 swankForPurchaseJoin <- swankUsage |>
   mutate(`MMS Id` = case_when(
+    # Initial Load - Up to Spring 2026
     Title == 'Hard Target' ~ '9926454886702311',
     Title == 'Last Man Standing' ~ '9926454886802311',
     Title == 'Love Lies Bleeding' ~ '9926858248202311',
     Title == 'The Two Jakes' ~ '9926602681102311',
+    
+    # Summer 2026
+    
+    # Fall 2026
+    
     .default = 'Unknown'
   ))
 
@@ -697,18 +835,16 @@ Sometimes, physical films are bought for classroom use. This will contain their 
 
 Just like the Alma Digital items, the usage joining can be done by MMS Id directly. 
 
-All usage will be loans in the last 3 years from the day the file was downloaded, or since purchase if the item was purchased within the last 3 years.
+All usage will be loans in the last 4 years from the day the file was downloaded, or since purchase if the item was purchased within the last 4 years.
 
 
-```{r}
-physicalUsage <- read_excel('Usage of Physical Films Bought for Classroom Use May 11.xlsx') |>
-  select(Title, `MMS Id`, `Num of Loans Last 3 Years`) |>
+```{r, warning = FALSE}
+setwd('C:\\Users\\aharrima\\OneDrive - University of Tennessee\\Documents\\Classroom Use Digital Media Report')
+
+physicalUsage <- read_excel('Usage of Physical Films Bought for Classroom Use Sep 11.xlsx') |>
+  select(Title, `MMS Id`, `Num of Loans Last 4 Years`) |>
   mutate(Metric_Type = 'Physical Loans',
-         Platform = 'Physical Library') |>
-  mutate(`Num of Loans Last 3 Years` = case_when(
-    `MMS Id` == '9926586378502311' ~ 4,
-    .default = `Num of Loans Last 3 Years`
-  ))
+         Platform = 'Physical Library')
 
 physicalUsage
 ```
@@ -724,6 +860,7 @@ physicalUsage
 ```{r}
 physicalForRequestJoin <- physicalUsage |>
   mutate(Ticket_Number = case_when(
+    #Initial Load - Up to Spring 2026
     Title == 'De xian chao fan = All about love /' ~ '23450213',
     Title == 'Bombay Beach /' ~ '21252503',
     Title == "Calling and recalling : the sentiments of women's script (Nüshu) /" ~ '22789959',
@@ -743,6 +880,12 @@ physicalForRequestJoin <- physicalUsage |>
     Title == 'The story of Qiu Ju = Qiuju da guan si /' ~ '23449126',
     `MMS Id` == '9926586378502311' ~ '20848726',
     Title == 'To live = Huo zhe /' ~ '22951652',
+    
+    # Summer 2026
+    
+    
+    # Fall 2026 - Incomplete up to Sep 11 only
+    
     .default = 'Unknown'
   ))
 
@@ -783,7 +926,7 @@ This will be used to find any titles whose usage is not accounted for, or to see
 
 ## Video Request List
 
-```{r}
+```{r, warning = FALSE}
 cleanRequestList <- videoRequestAll |>
   mutate(Unified_Platform = case_when(
     is.na(Platform.x) == FALSE ~ 'Kanopy',
@@ -796,14 +939,14 @@ cleanRequestList <- videoRequestAll |>
     is.na(Plays) == FALSE ~ 'Plays',
     is.na(Reporting_Period_Total) == FALSE ~ 'Total Item Requests',
     is.na(File_Views) == FALSE ~ 'File Views',
-    is.na(`Num of Loans Last 3 Years`) == FALSE ~ 'Physical Loans',
+    is.na(`Num of Loans Last 4 Years`) == FALSE ~ 'Physical Loans',
     .default = NA
   ),
         Unified_Usage = case_when(
     is.na(Plays) == FALSE ~ Plays,
     is.na(Reporting_Period_Total) == FALSE ~ Reporting_Period_Total,
     is.na(File_Views) == FALSE ~ File_Views,
-    is.na(`Num of Loans Last 3 Years`) == FALSE ~ `Num of Loans Last 3 Years`,
+    is.na(`Num of Loans Last 4 Years`) == FALSE ~ `Num of Loans Last 4 Years`,
     .default = NA
   )
 ) |>
@@ -970,7 +1113,7 @@ cleanPurchaseList <- videoPurchaseAll |>
     is.na(Reporting_Period_Total) == FALSE ~ 'Total Item Requests',
     is.na(File_Views) == FALSE ~ 'File Views',
     is.na(`Reporting Period Total Views`) == FALSE ~ 'Title Playbacks',
-    is.na(`Num of Loans Last 3 Years`) == FALSE ~ 'Last 3 Year Loans',
+    is.na(`Num of Loans Last 4 Years`) == FALSE ~ 'Last 4 Year Loans',
     .default = NA
   ),
         Unified_Usage = case_when(
@@ -978,7 +1121,7 @@ cleanPurchaseList <- videoPurchaseAll |>
     is.na(Reporting_Period_Total) == FALSE ~ Reporting_Period_Total,
     is.na(File_Views) == FALSE ~ File_Views,
     is.na(`Reporting Period Total Views`) == FALSE ~ `Reporting Period Total Views`,
-    is.na(`Num of Loans Last 3 Years`) == FALSE ~ `Num of Loans Last 3 Years`,
+    is.na(`Num of Loans Last 4 Years`) == FALSE ~ `Num of Loans Last 4 Years`,
     .default = NA
   )
 ) |>
@@ -995,7 +1138,9 @@ cleanPurchaseList
 
 
 
-```{r}
+```{r, warning = FALSE}
+setwd('C:\\Users\\aharrima\\OneDrive - University of Tennessee\\Documents\\Classroom Use Digital Media Report')
+
 write_xlsx(cleanRequestList3, 'Classroom Film Request Report.xlsx')
 write_xlsx(cleanPurchaseList, 'Classroom Film Purchase Report.xlsx')
 ```
