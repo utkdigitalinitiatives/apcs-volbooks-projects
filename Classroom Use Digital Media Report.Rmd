@@ -22,7 +22,7 @@ library(lubridate)
 
 This file tracks the usage of all films and other videos purchased for classroom use. This is a supplement to the VolBooks report, which tracks similar information for textbooks. Since the VolBooks data and the video purchasing data are different, not every metric will convert one-to-one.
 
-This report was last updated after the Spring 2026 semester.
+This report was last updated after the Summer 2026 semester.
 
 
 # Load Steven's TDX Ticket Request Data
@@ -158,7 +158,7 @@ allRequests <- rbind(fall26, summer26, spring26, fall25, summer25, spring25, fal
 # Get the Video Purchase Data from Alma
 
 
-All video purchases that are specifically for classroom use purposes have the 4th reporting code TDX, TDX - Kanopy, TDX - DSL, or TDX - PPR. This is tracked in the Alma Analytics report "Films Bought for Classroom Use". Save a local copy of this analytics file and load it in below.
+All video purchases that are specifically for classroom use purposes have the 4th reporting code TDX, TDX - Kanopy, TDX - DSL, or TDX - PPR. This is tracked in the Alma Analytics report "Films Bought for Classroom Use". Save a local copy of this analytics file each semester and load it in below.
 
 
 
@@ -327,6 +327,7 @@ kanopyUsage
 
 ### Usage Joining to the Video Requests
 
+FOR EACH SEMESTER, add the correct Ticket Number to the code below. Ticket Number is used to join usage to the requests.
 
 ```{r}
 kanopyForRequestJoin <- kanopyUsage |>
@@ -392,7 +393,7 @@ videoRequestKanopy
 
 ### Usage Joining: Video Purchases
 
-
+FOR EACH SEMESTER, Add the proper MMS ID for each title based on the Alma data. MMS ID will connect the purchases to the Alma purchase info.
 
 ```{r}
 kanopyForPurchaseJoin <- kanopyUsage |>
@@ -635,10 +636,10 @@ videoPurchaseDocuseek
 ## Alma Digital
 
 
-This is for all films and will need to be filtered down. When joining to the purchases, it can be done via MMS ID. Joining to the requests will take more work.
+This is for all films and will need to be filtered down. When joining to the purchases, it can be done via MMS ID without any manual data additions. Joining to the requests will take adding the ticket number, just like the vendors above.
 
 
-Usage starts from January 2023 and is stored in the Alma Analytics file named "Classroom Digital Film Usage".
+Usage starts from January 2023 and is stored in the Alma Analytics file named "Classroom Digital Film Usage". This file will need to be re-downloaded each semester.
 
 
 ```{r, warning = FALSE}
@@ -707,7 +708,7 @@ videoRequestAlmaDigital
 ### Usage Joining: Video Purchases
 
 
-
+No additional data needs to be added, since both files come with MMS ID by default.
 
 ```{r}
 videoPurchaseAlmaDigital <- left_join(videoPurchaseDocuseek, almaDigitalUsage, by = 'MMS Id')
@@ -760,7 +761,7 @@ swankUsage
 
 ### Usage Joining to the Video Requests
 
-There are currently no SWANK titles that line up with requests, but in the future, they would go here.
+
 
 ```{r}
 swankForRequestJoin <- swankUsage |>
@@ -833,7 +834,7 @@ videoPurchaseSwank
 
 Sometimes, physical films are bought for classroom use. This will contain their physical loan usage.
 
-Just like the Alma Digital items, the usage joining can be done by MMS Id directly. 
+Just like the Alma Digital items, the usage joining can be done by MMS Id directly. The Ticket Number still needs to be added in like above vendors.
 
 All usage will be loans in the last 4 years from the day the file was downloaded, or since purchase if the item was purchased within the last 4 years.
 
@@ -967,7 +968,6 @@ cleanRequestList
 
 ## Add in Information for PowerBI Purposes
 
-
 ```{r, warning = FALSE}
 cleanRequestList2 <- cleanRequestList |>
   mutate(CourseNumbers = str_extract_all(Course, "\\(?[0-9,.]+\\)?"))
@@ -1098,6 +1098,8 @@ cleanRequestList3
 
 ## Video Purchase List
 
+This does a similar cleaning as the step above, but for purchase data instead of the usage and requests.
+
 ```{r}
 cleanPurchaseList <- videoPurchaseAll |>
   mutate(Unified_Platform = case_when(
@@ -1137,6 +1139,7 @@ cleanPurchaseList
 ```
 
 
+# Export for PowerBI Use
 
 ```{r, warning = FALSE}
 setwd('C:\\Users\\aharrima\\OneDrive - University of Tennessee\\Documents\\Classroom Use Digital Media Report')
@@ -1144,5 +1147,8 @@ setwd('C:\\Users\\aharrima\\OneDrive - University of Tennessee\\Documents\\Class
 write_xlsx(cleanRequestList3, 'Classroom Film Request Report.xlsx')
 write_xlsx(cleanPurchaseList, 'Classroom Film Purchase Report.xlsx')
 ```
+
+
+These Excel files are used to update the "Classroom Use Film Report" PowerBI file. 
 
 
