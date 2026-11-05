@@ -792,16 +792,45 @@ requestAndFill <- left_join(allVolBooks, sectionInfo, by = c('Section Code' = 's
           Semester == 'Spring 2026' ~ 6,
           Semester == 'Summer 2026' ~ 7,
           Semester == 'Fall 2026' ~ 8
-        ))
+        )) |>
+  distinct()
 
 requestAndFill
+```
+
+
+### Current Departments Served Count
+
+```{r}
+currentDepartments <- requestAndFill |>
+  filter(Semester == 'Fall 2026') |>
+  select(`Academic Department Name`)
+
+requestAndFill2 <- requestAndFill |>
+  mutate(CurrentDepartment = ifelse(`Academic Department Name` %in% currentDepartments$`Academic Department Name`, `Academic Department Name`, 'Outdated'))
+
+requestAndFill2
+```
+
+
+```{r, warning = FALSE}
+test <- requestAndFill2 |>
+  filter(Fulfilled == 1 & `Academic Department Name` %in% currentDepartments$`Academic Department Name`) |>
+  group_by(`Academic Department Name`) |>
+  summarise(coursesServed = length(Course_Code)) |>
+  arrange(desc(coursesServed))
+
+test
+
+#setwd('C:\\Users\\aharrima\\OneDrive - University of Tennessee\\Documents\\VolBooks PowerBI Report')
+#write_xlsx(test, 'Departments Served by VolBooks October 2026.xlsx')
 ```
 
 
 
 ```{r, warning = FALSE}
 setwd('C:\\Users\\aharrima\\OneDrive - University of Tennessee\\Documents\\VolBooks PowerBI Report')
-write_xlsx(requestAndFill, 'Full Course Information.xlsx')
+write_xlsx(requestAndFill2, 'Full Course Information.xlsx')
 ```
 
 
