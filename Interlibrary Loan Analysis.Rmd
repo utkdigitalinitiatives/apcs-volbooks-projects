@@ -40,7 +40,7 @@ If the data and code are not saved in the same folder, change the information in
 
 ```{r, warning = FALSE}
 setwd('C:\\Users\\aharrima\\OneDrive - University of Tennessee\\Documents\\Interlibrary Loan Analysis')
-loans <- read_excel('01012014-07152026 borrowing.xlsx')
+loans <- read_excel('01012014-10312026 borrowing.xlsx')
 ```
 
 
@@ -52,7 +52,7 @@ Use this if you are combining multiple files together in the cell above and want
 
 ```{r}
 setwd('C:\\Users\\aharrima\\OneDrive - University of Tennessee\\Documents\\Interlibrary Loan Analysis')
-#write_xlsx(loans, '01012014-07152026 borrowing.xlsx')
+#write_xlsx(loans, '01012014-10312026 borrowing.xlsx')
 ```
 
 
@@ -132,10 +132,6 @@ missingTitle <- detailedLoans |>
 missingTitle
 ```
 
-
-
-
-
 # Create a Library Purchased Filter
 
 
@@ -148,9 +144,10 @@ titles <- unique(detailedLoans$titleCheck)
 titleWithPurchaseA <- data.frame()
 titleWithPurchaseB <- data.frame()
 titleWithPurchaseC <- data.frame()
+titleWithPurchaseD <- data.frame()
 
-for(i in 1:length(titles)){
-  if(i %% 2000 == 0){
+for(i in 45001:length(titles)){
+  if(i %% 1500 == 0){
     print(i) #Used as a timer to track the function's time to completion
   }
   title1 <- titles[i]
@@ -165,20 +162,23 @@ for(i in 1:length(titles)){
     subset$IsPurchased <- 'No'
   }
   
-  if(i <= 20000){
+  if(i <= 15000){
     titleWithPurchaseA <- rbind(titleWithPurchaseA, subset)
   }
-  else if(i <= 40000){
+  else if(i <= 30000){
     titleWithPurchaseB <- rbind(titleWithPurchaseB, subset)
   }
-  else{
+  else if(i <= 45000){
     titleWithPurchaseC <- rbind(titleWithPurchaseC, subset)
+  }
+  else{
+    titleWithPurchaseD <- rbind(titleWithPurchaseD, subset)
   }
 
 }
 
 
-titleWithPurchase <- rbind(titleWithPurchaseA, titleWithPurchaseB, titleWithPurchaseC) 
+titleWithPurchase <- rbind(titleWithPurchaseA, titleWithPurchaseB, titleWithPurchaseC, titleWithPurchaseD) 
 
 check <- titleWithPurchase |>
   group_by(IsPurchased) |>
@@ -203,12 +203,14 @@ Just like with the last cleaning step, breaking up the titles makes the code mor
 rm(titleWithPurchaseA)
 rm(titleWithPurchaseB)
 rm(titleWithPurchaseC)
+rm(titleWithPurchaseD)
 
 
 titles <- unique(titleWithPurchase$titleCheck)
 espFilledLoansA <- data.frame()
 espFilledLoansB <- data.frame()
 espFilledLoansC <- data.frame()
+espFilledLoansD <- data.frame()
 
 for(i in 1:length(titles)){
   if(i %% 2000 == 0){
@@ -236,18 +238,21 @@ for(i in 1:length(titles)){
   }
 
   
-  if(i <= 20000){
+  if(i <= 15000){
     espFilledLoansA <- rbind(espFilledLoansA, filledSubset)
   }
-  else if(i <= 40000){
+  else if(i <= 30000){
     espFilledLoansB <- rbind(espFilledLoansB, filledSubset)
   }
-  else{
+  else if(i <= 45000){
     espFilledLoansC <- rbind(espFilledLoansC, filledSubset)
+  }
+  else{
+    espFilledLoansD <- rbind(espFilledLoansD, filledSubset)
   }
 }
 
-espFilledLoans <- rbind(espFilledLoansA, espFilledLoansB, espFilledLoansC) |>
+espFilledLoans <- rbind(espFilledLoansA, espFilledLoansB, espFilledLoansC, espFilledLoansD) |>
   filter(cleanTitle != '')
 
 
@@ -281,14 +286,16 @@ This block also can be made more efficient by breaking up into more chunks. This
 rm(espFilledLoansA)
 rm(espFilledLoansB)
 rm(espFilledLoansC)
+rm(espFilledLoansD)
 titles <- unique(espFilledLoans$titleCheck)
 
 issnFilledLoansA <- data.frame()
 issnFilledLoansB <- data.frame()
 issnFilledLoansC <- data.frame()
+issnFilledLoansD <- data.frame()
 
 for(i in 1:length(titles)){
-  if(i %% 2000 == 0){
+  if(i %% 1500 == 0){
     print(i) #Used as a timer to track the function's time to completion
   }
   title1 <- titles[i]
@@ -313,19 +320,22 @@ for(i in 1:length(titles)){
   }
 
   
-  if(i <= 20000){
+  if(i <= 15000){
     issnFilledLoansA <- rbind(issnFilledLoansA, filledSubset)
   }
-  else if(i <= 40000){
+  else if(i <= 30000){
     issnFilledLoansB <- rbind(issnFilledLoansB, filledSubset)
   }
-  else{
+  else if(i <= 45000){
     issnFilledLoansC <- rbind(issnFilledLoansC, filledSubset)
+  }
+  else{
+    issnFilledLoansD <- rbind(issnFilledLoansD, filledSubset)
   }
 }
 
 
-issnFilledLoans <- rbind(issnFilledLoansA, issnFilledLoansB, issnFilledLoansC)
+issnFilledLoans <- rbind(issnFilledLoansA, issnFilledLoansB, issnFilledLoansC, issnFilledLoansD)
 
 sum(is.na(issnFilledLoans$ISSN))
 ```
@@ -532,7 +542,7 @@ powerBITitles
 
 Change the setwd() function as needed depending on where the data needs to go.
 
-```{r}
+```{r, warning = FALSE}
 setwd('C:\\Users\\aharrima\\OneDrive - University of Tennessee\\Documents\\Interlibrary Loan Analysis')
 write_xlsx(powerBITitles, 'ILL Borrowing Data.xlsx')
 ```
